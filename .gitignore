@@ -1,0 +1,40 @@
+# R / RStudio
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# renv (NEVER commit the project library)
+renv/library/
+renv/python/
+renv/staging/
+renv/sandbox/
+renv/local/
+
+# Logs / temp
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# Package build outputs
+*.tar.gz
+*.zip
+*.tgz
+.Rcheck/
+check/
+
+# pkgdown / docs (si tu ne publies pas via GitHub Pages)
+docs/
+pkgdown/
+
+# vignettes output
+inst/doc/
+vignettes/*.html
+vignettes/*.pdf

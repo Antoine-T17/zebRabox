@@ -1,0 +1,41 @@
+Package: zebRabox
+Type: Package
+Title: ZebRabox Shiny Application
+Version: 0.1.0
+Authors@R: 
+    person("Antoine", "Tourret", email = "antoinetourretpro@gmail.com", role = c("aut", "cre"))
+Maintainer: Antoine Tourret <antoinetourretpro@gmail.com>
+Description: Run the ZebRabox Shiny application for importing, processing and
+    interactively visualizing behavioural tracking data.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 4.1.0)
+Imports:
+    bslib,
+    DT,
+    dplyr,
+    fmsb,
+    ggforce,
+    ggiraph,
+    ggplot2,
+    htmlwidgets,
+    openxlsx,
+    plotly,
+    purrr,
+    RColorBrewer,
+    readxl,
+    rhandsontable,
+    sass,
+    scales,
+    shiny,
+    shinydashboard,
+    shinyjqui,
+    shinyjs,
+    shinyWidgets,
+    stringr,
+    tidyr,
+    writexl,
+    zip
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2

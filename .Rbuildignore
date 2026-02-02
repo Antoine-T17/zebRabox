@@ -1,0 +1,19 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^renv$
+^renv\.lock$
+^renv-deps\.R$
+^\.Rhistory$
+^\.RData$
+^\.Ruserdata$
+^LICENSE\.md$
+
+# Git / CI metadata (optionnel mais classique)
+^\.git$
+^\.gitignore$
+^\.github$
+
+# pkgdown (si tu l'utilises)
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
