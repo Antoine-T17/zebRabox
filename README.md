@@ -25,7 +25,7 @@ zebRabox::run_app()
 
 ### Load or Create a Plate Plan
 
-ZebraBox uses standard multi-well plates. Edge wells can show border effects. The app can generate a random plan. Download it as `.xlsx` or view it as a table and figure. If you already have a plan, load it and wait to see *Upload complete* to click on the button. Column names must follow the required format. *What is the required format?* Download a [96-well sample plate plan](inputs/sample_plate_plan_plate_1.xlsx).
+ZebraBox uses standard multi-well plates. Edge wells can show border effects. The app can generate a random plan. Download it as `.xlsx` or view it as a table and figure. If you already have a plan, load it and wait to see *Upload complete* to click on the button. Column names must follow the required format. *What is the required format?* Download a [96-well sample plate plan](inst/app/inputs/sample_plate_plan_plate_1.xlsx).
 
 ### Load Raw Data
 
@@ -62,7 +62,7 @@ Confirm that each raw data file is correctly paired with its corresponding plate
 
 ### Additional Parameters
 
-Before running full processing, upload your period transition file and removal specification file. Both must be `.xlsx` files with column names in the required format. *What is the required format?* Download a [sample period transition file](inputs/sample_period_transition.xlsx) and a [sample removal specification file](inputs/sample_removal_specification.xlsx).
+Before running full processing, upload your period transition file and removal specification file. Both must be `.xlsx` files with column names in the required format. *What is the required format?* Download a [sample period transition file](inst/app/inputs/sample_period_transition.xlsx) and a [sample removal specification file](inst/app/inputs/sample_removal_specification.xlsx).
 
 ### Run Full Processing
 
