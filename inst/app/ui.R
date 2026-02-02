@@ -351,7 +351,7 @@ header_items <- shinydashboard::dashboardHeader(
       ),
       # Help
       shiny::a(
-        href = "https://antoine-t17.github.io/website_personal/posts/rshiny_app_zebrabox/",
+        href = "https://github.com/Antoine-T17/zebRabox/tree/main?tab=readme-ov-file#zebrabox--from-raw-data-to-interactive-visualization",
         target = "_blank",
         shiny::icon("question-circle", class = "fa-2x"),
         style = "color: #2196F3; text-decoration: none;"
