@@ -1,4 +1,4 @@
-<img src="www/my_sticker_without_border.png" align="right" width="100" />
+<img src="inst/app/www/my_sticker_without_border.png" align="right" width="100" />
 
 # ZebRabox : **From raw data to interactive visualization.**
 
@@ -38,12 +38,12 @@ The number of raw files must match your plate plans.
 -   **Tracking mode**\
     Follows each subject’s path.\
     Yields distance moved, active time, and movement counts.\
-    See details in the [ZebraBox guide](inputs/zebrabox_guidelines.pdf).
+    See details in the [ZebraBox guide](inst/app/inputs/zebrabox_guidelines.pdf).
 
 -   **Quantization mode**\
     Counts pixel color changes.\
     Yields high, medium, or low activity levels.\
-    See details in the [ZebraBox guide](inputs/zebrabox_guidelines.pdf).
+    See details in the [ZebraBox guide](inst/app/inputs/zebrabox_guidelines.pdf).
 
 ### Choose Secondary Mode
 
