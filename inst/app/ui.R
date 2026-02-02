@@ -407,7 +407,7 @@ welcome_content <- shinydashboard::tabItem(
       shiny::div(
         class = "fade-in logo-fade",
         style = "display: flex; justify-content: center; align-items: center; gap: 60px; margin: 30px 0 60px 0; flex-wrap: wrap; opacity: 0;",
-        shiny::a(href = "https://github.com/Antoine-T17/Rshiny_app_zebrabox", target = "_blank",
+        shiny::a(href = "https://github.com/Antoine-T17/zebRabox/tree/main?tab=readme-ov-file#zebrabox--from-raw-data-to-interactive-visualization", target = "_blank",
                  shiny::tags$img(src = "my_sticker_without_border.png",
                                  style = "height: 130px; width: auto; transition: transform 0.4s ease; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));",
                                  onmouseover = "this.style.transform='scale(1.12)'",
