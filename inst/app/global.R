@@ -35,11 +35,7 @@ waiting_message_ui <- function() {
 
 # File Reading Utility
 read_file <- function(path, file_name) {
-  df <- if (grepl("\\.csv$", path, ignore.case = TRUE)) {
-    utils::read.csv2(path, sep = ";", dec = ".")
-  } else {
-    readxl::read_excel(path)
-  }
+  df <- readxl::read_excel(path)
   attr(df, "file_name") <- file_name
   df
 }
@@ -49,7 +45,6 @@ notify <- function(msg, type = c("message","warning","error"), duration = 6) {
   type <- match.arg(type)
   shiny::showNotification(msg, type = type, duration = duration)
 }
-
 
 # ======================================================================
 # Processing mode configuration (used by the generic processing module)
@@ -245,7 +240,6 @@ ensure_colors <- function(n, cols = character(0)) {
   }
   cols
 }
-
 
 # ----------------------------------------------------------------------
 # Options

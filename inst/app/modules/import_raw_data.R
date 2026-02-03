@@ -12,10 +12,10 @@ raw_data_ui <- function(
     secondary_choices = c("Light Dark Mode", "Vibration Mode")
 ) {
   ns <- shiny::NS(id)
-  
+
   shiny::tagList(
     shinyjs::useShinyjs(),
-    
+
     # ---------------- Inputs ----------------
     shiny::fluidRow(
       shinydashboard::box(
@@ -25,9 +25,9 @@ raw_data_ui <- function(
           shiny::tagAppendAttributes(
             shiny::fileInput(
               ns("raw_data_files"), "Upload Raw Data Files (Excel)",
-              multiple = TRUE, accept = c(".csv", ".xlsx")
+              multiple = TRUE, accept = c(".xlsx")
             ),
-            `aria-label` = "Upload CSV or Excel files"
+            `aria-label` = "Excel files"
           ),
           shiny::actionButton(ns("load_raw_data"), "Load Raw Data"),
           shiny::selectInput(
@@ -41,7 +41,7 @@ raw_data_ui <- function(
         )
       )
     ),
-    
+
     # ---------------- Preview ----------------
     shiny::fluidRow(
       shinydashboard::box(
@@ -58,12 +58,12 @@ raw_data_ui <- function(
 # ----------------------------------------------------------------------
 raw_data_server <- function(id, rv) {
   shiny::moduleServer(id, function(input, output, session) {
-    
+
     # ---------------- Enable/Disable Load Button ----------------
     shiny::observe({
       shinyjs::toggleState("load_raw_data", !is.null(input$raw_data_files))
     })
-    
+
     # ---------------- Load Raw Data ----------------
     shiny::observeEvent(input$load_raw_data, {
       tryCatch({
@@ -74,16 +74,16 @@ raw_data_server <- function(id, rv) {
         notify(conditionMessage(e), type = "error", duration = NULL)
       })
     })
-    
+
     # ---------------- Robust modes updater (module-level) ----------------
     # local safe %||% in case not defined globally in this module
     `%||%` <- function(a, b) if (is.null(a)) b else a
-    
+
     observe({
       # read raw inputs (namespaced already inside module server)
       p_in <- input$primary_mode
       s_in <- input$secondary_mode
-      
+
       # normalize: treat "" and whitespace as missing
       normalize_sel <- function(x) {
         if (is.null(x)) return(NULL)
@@ -93,16 +93,16 @@ raw_data_server <- function(id, rv) {
       }
       p <- normalize_sel(p_in)
       s <- normalize_sel(s_in)
-      
+
       # current stored values (NULL if unset)
       prev_p <- rv$primary_mode %||% NULL
       prev_s <- rv$secondary_mode %||% NULL
-      
+
       # only update rv when something actually changed
       if (!identical(p, prev_p) || !identical(s, prev_s)) {
         rv$primary_mode   <- p
         rv$secondary_mode <- s
-        
+
         # notify only when both selections are valid (non-NULL).
         # prevents notification when reset clears fields.
         if (!is.null(p) && !is.null(s)) {
@@ -110,8 +110,8 @@ raw_data_server <- function(id, rv) {
         }
       }
     })
-    
-    
+
+
     # ---------------- Common DataTable Options ----------------
     dt_options <- list(
       pageLength   = 25,
@@ -119,7 +119,7 @@ raw_data_server <- function(id, rv) {
       orderClasses = TRUE,
       scrollX      = TRUE
     )
-    
+
     # ---------------- Render Preview Tabs ----------------
     output$raw_data_tabs <- shiny::renderUI({
       shiny::req(rv$raw_data_list)
@@ -127,7 +127,7 @@ raw_data_server <- function(id, rv) {
         notify("No raw data loaded yet. Please upload and load raw data files.", type = "warning")
         return(NULL)
       }
-      
+
       tabs <- lapply(seq_along(rv$raw_data_list), function(i) {
         file_name <- attr(rv$raw_data_list[[i]], "file_name")
         shiny::tabPanel(
@@ -137,7 +137,7 @@ raw_data_server <- function(id, rv) {
       })
       do.call(shiny::tabsetPanel, c(tabs, list(id = session$ns("raw_data_tabset"))))
     })
-    
+
     # ---------------- Render DataTables ----------------
     shiny::observe({
       shiny::req(!is.null(rv$raw_data_list))
