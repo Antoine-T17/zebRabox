@@ -3,49 +3,11 @@
 # Global setup and utilities (runs once per R session)
 # ======================================================================
 
-# ------------------------------------------------------------------------------
-# Required packages (checked early with clear error messages)
-# ------------------------------------------------------------------------------
-
-pkgs <- c(
-  "shiny","shinyjs","shinydashboard","shinyWidgets","bslib","sass",
-  "readxl","openxlsx","dplyr","ggplot2","ggforce","plotly","htmlwidgets",
-  "DT","zip","scales","rhandsontable","shinyjqui","stringr","RColorBrewer",
-  "writexl","purrr","tidyr","fmsb","ggiraph"
-)
-
-# Check which packages are missing (do not attach packages yet)
-missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
-
-# If we are in a renv project and packages are missing, try restoring once.
-# This helps on fresh machines where users run the app via runGitHub().
-if (length(missing) > 0 && file.exists("renv.lock") && requireNamespace("renv", quietly = TRUE)) {
-  message(
-    "Missing packages detected: ", paste(missing, collapse = ", "),
-    "\nAttempting to install required dependencies via renv::restore()..."
-  )
-  try(renv::restore(project = ".", prompt = FALSE), silent = TRUE)
-  
-  # Re-check after restore attempt
-  missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
-}
-
-# If still missing, stop with a helpful message
-if (length(missing) > 0) {
-  stop(
-    "Missing packages: ", paste(missing, collapse = ", "),
-    "\nIf you are on Windows, make sure Rtools is installed.",
-    "\nThen re-run: renv::restore(prompt = FALSE)"
-  )
-}
-
-# Attach packages now that we know they're installed
-invisible(lapply(pkgs, library, character.only = TRUE))
-
-
 # ----------------------------------------------------------------------
 # Global Utility Functions
 # ----------------------------------------------------------------------
+
+library(shiny)
 
 # Convert selected columns to numeric (with locale-safe decimal replacement)
 convert_numeric_cols <- function(df, cols) {
@@ -82,7 +44,7 @@ read_file <- function(path, file_name) {
   df
 }
 
-# Notification helper  
+# Notification helper
 notify <- function(msg, type = c("message","warning","error"), duration = 6) {
   type <- match.arg(type)
   shiny::showNotification(msg, type = type, duration = duration)
@@ -130,7 +92,7 @@ get_processing_config <- function(mode) {
       TRUE ~ x
     )
   }
-  
+
   vm_period_map <- function(x) {
     dplyr::case_when(
       stringr::str_detect(x, "^vibration") ~ "vibration",
@@ -138,7 +100,7 @@ get_processing_config <- function(mode) {
       TRUE ~ x
     )
   }
-  
+
   qm_filter_fn <- function(df) {
     if ("datatype" %in% colnames(df) && any(stringr::str_detect(df$datatype, "quantauc"))) {
       dplyr::filter(df, stringr::str_detect(datatype, "quantauc"))
@@ -146,7 +108,7 @@ get_processing_config <- function(mode) {
       df
     }
   }
-  
+
   switch(mode,
          "tm_ldm" = list(
            ui_title        = "Tracking Mode, Light-Dark Mode",
@@ -204,13 +166,13 @@ get_visualization_config <- function(mode) {
     "inadist","inadur","inact","emptydur","emptyct"
   )
   qm_expected <- c("frect","fredur","midct","middur","burct","burdur","zerct","zerdur","actinteg")
-  
+
   # Label helpers
   ldm_period_keys   <- c("light","dark")
   ldm_period_labels <- c("Light period","Dark period")
   vm_period_keys    <- c("vibration","rest")
   vm_period_labels  <- c("Vibration period","Rest period")
-  
+
   switch(mode,
          "tm_ldm" = list(
            ui_title             = "Tracking Mode, Light-Dark Mode",

@@ -18,7 +18,7 @@ Copy/paste the following lines into the R console in RStudio :
 
 ```r
 install.packages("remotes")
-remotes::install_github("Antoine-T17/zebRabox")
+remotes::install_github("Antoine-T17/zebRabox", dependencies = TRUE, upgrade = "never")
 
 zebRabox::run_app()
 ```
