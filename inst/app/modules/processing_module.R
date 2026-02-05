@@ -16,7 +16,7 @@ processing_module_ui <- function(id, config) {
         shiny::actionButton(ns("confirm_mapping"), "Confirm Mapping"),
 
         shiny::h4("Additional Processing Parameters"),
-        shiny::fileInput(ns("period_file"), "Upload Period Transitions File (Excel)", accept = ".xlsx"),
+        shiny::fileInput(ns("period_file"),  "Upload Period Transitions File (Excel)", accept = ".xlsx"),
         shiny::fileInput(ns("removal_file"), "Upload Removal Specifications File (Excel)", accept = ".xlsx"),
         shiny::actionButton(ns("run_processing"), "Run Full Processing")
       )
@@ -84,6 +84,83 @@ processing_module_server <- function(id, rv, config) {
     })
 
     # ======================================================================
+    # 0) Import period/removal files WITH progress + store in rv
+    # ======================================================================
+    shiny::observeEvent(input$period_file, {
+      shiny::req(input$period_file)
+
+      tryCatch({
+        shiny::withProgress(message = "Importing period transitions…", value = 0, {
+          shiny::incProgress(0.25, detail = "Reading Excel…")
+          period_df <- readxl::read_excel(input$period_file$datapath)
+
+          shiny::incProgress(0.30, detail = "Validating required columns…")
+          shiny::req(all(c("start", "transition") %in% names(period_df)))
+
+          shiny::incProgress(0.25, detail = "Converting & sorting…")
+          period_df$start <- as.numeric(period_df$start)
+          period_df <- period_df[order(period_df$start), , drop = FALSE]
+
+          shiny::incProgress(0.20, detail = "Storing in memory…")
+          rv$period_df <- period_df
+
+          # Invalidate results if inputs changed
+          rv$processing_results <- NULL
+        })
+
+        add_console_message("✅ Period transitions imported & stored (rv$period_df).")
+        notify("Period transitions imported.", type = "message")
+
+      }, error = function(e) {
+        rv$period_df <- NULL
+        add_console_message(paste("❌ Period file error:", conditionMessage(e)))
+        notify(conditionMessage(e), type = "error", duration = NULL)
+      })
+    })
+
+    shiny::observeEvent(input$removal_file, {
+      shiny::req(input$removal_file)
+
+      tryCatch({
+        shiny::withProgress(message = "Importing removal specifications…", value = 0, {
+          shiny::incProgress(0.25, detail = "Reading Excel…")
+          removal_df <- readxl::read_excel(input$removal_file$datapath)
+
+          shiny::incProgress(0.25, detail = "Validating required columns…")
+          shiny::req("plate_id" %in% names(removal_df))
+
+          shiny::incProgress(0.30, detail = "Normalizing removal fields…")
+          for (colname in c("remove_time_codes", "remove_wells", "remove_conditions", "remove_periods")) {
+            if (!(colname %in% names(removal_df))) removal_df[[colname]] <- NA_character_
+            removal_df[[colname]] <- as.character(removal_df[[colname]])
+            removal_df[[colname]] <- ifelse(
+              is.na(removal_df[[colname]]) | tolower(trimws(removal_df[[colname]])) %in% c("", "no"),
+              NA_character_,
+              removal_df[[colname]]
+            )
+          }
+
+          shiny::incProgress(0.20, detail = "Parsing plate_id…")
+          removal_df$plate_id <- suppressWarnings(as.numeric(gsub("Plate", "", removal_df$plate_id)))
+
+          shiny::incProgress(0.00, detail = "Storing in memory…")
+          rv$removal_df <- removal_df
+
+          # Invalidate results if inputs changed
+          rv$processing_results <- NULL
+        })
+
+        add_console_message("✅ Removal specifications imported & stored (rv$removal_df).")
+        notify("Removal specifications imported.", type = "message")
+
+      }, error = function(e) {
+        rv$removal_df <- NULL
+        add_console_message(paste("❌ Removal file error:", conditionMessage(e)))
+        notify(conditionMessage(e), type = "error", duration = NULL)
+      })
+    })
+
+    # ======================================================================
     # 1) UI selectors: map RAW XLSX -> Plate Plans (ZIP excluded)
     # ======================================================================
     output$file_plate_selectors <- shiny::renderUI({
@@ -123,8 +200,8 @@ processing_module_server <- function(id, rv, config) {
             6,
             shiny::selectInput(
               ns(paste0("plate_select_", i)),
-              label   = NULL,
-              choices = stats::setNames(plate_ids, plate_file_names),
+              label    = NULL,
+              choices  = stats::setNames(plate_ids, plate_file_names),
               selected = plate_ids[i]
             )
           )
@@ -310,7 +387,10 @@ processing_module_server <- function(id, rv, config) {
         if (length(time_codes_to_remove) > 0 && !any(is.na(time_codes_to_remove))) {
           invalid <- setdiff(time_codes_to_remove, current_data$start)
           if (length(invalid) > 0) {
-            add_console_message(sprintf("⚠️ Warning: Plate %d - These time codes do not match any 'start': %s", i, paste(invalid, collapse = ", ")))
+            add_console_message(sprintf(
+              "⚠️ Warning: Plate %d - These time codes do not match any 'start': %s",
+              i, paste(invalid, collapse = ", ")
+            ))
           }
           time_codes_to_remove <- intersect(time_codes_to_remove, current_data$start)
           if (length(time_codes_to_remove) > 0) {
@@ -338,7 +418,10 @@ processing_module_server <- function(id, rv, config) {
         if (length(periods_to_remove) > 0) {
           invalid <- setdiff(periods_to_remove, current_data$period_with_numbers)
           if (length(invalid) > 0) {
-            add_console_message(sprintf("⚠️ Warning: Plate %d - These periods do not match any 'period_with_numbers': %s", i, paste(invalid, collapse = ", ")))
+            add_console_message(sprintf(
+              "⚠️ Warning: Plate %d - These periods do not match any 'period_with_numbers': %s",
+              i, paste(invalid, collapse = ", ")
+            ))
           }
           periods_to_remove <- intersect(periods_to_remove, current_data$period_with_numbers)
           if (length(periods_to_remove) > 0) {
@@ -363,7 +446,10 @@ processing_module_server <- function(id, rv, config) {
         if (length(wells_to_remove) > 0 && !any(is.na(wells_to_remove))) {
           invalid <- setdiff(wells_to_remove, current_data$animal)
           if (length(invalid) > 0) {
-            add_console_message(sprintf("⚠️ Warning: Plate %d - These wells do not match any 'animal': %s", i, paste(invalid, collapse = ", ")))
+            add_console_message(sprintf(
+              "⚠️ Warning: Plate %d - These wells do not match any 'animal': %s",
+              i, paste(invalid, collapse = ", ")
+            ))
           }
           wells_to_remove <- intersect(wells_to_remove, current_data$animal)
           if (length(wells_to_remove) > 0) {
@@ -395,7 +481,10 @@ processing_module_server <- function(id, rv, config) {
           } else {
             invalid <- setdiff(conditions_to_remove, current_data$condition)
             if (length(invalid) > 0) {
-              add_console_message(sprintf("⚠️ Warning: Plate %d - These conditions do not match any 'condition': %s", i, paste(invalid, collapse = ", ")))
+              add_console_message(sprintf(
+                "⚠️ Warning: Plate %d - These conditions do not match any 'condition': %s",
+                i, paste(invalid, collapse = ", ")
+              ))
             }
             conditions_to_remove <- intersect(conditions_to_remove, current_data$condition)
             if (length(conditions_to_remove) > 0) {
@@ -518,7 +607,6 @@ processing_module_server <- function(id, rv, config) {
         dplyr::filter(!is.na(.data$loc6), .data$loc6 != "", !is.na(.data$animal), .data$animal != "") |>
         dplyr::distinct(.data$loc6, .data$animal)
 
-      # warn only if SAME prefix -> multiple DIFFERENT animals
       amb <- raw_map |>
         dplyr::count(.data$loc6, name = "n_animals") |>
         dplyr::filter(.data$n_animals > 1)
@@ -577,257 +665,203 @@ processing_module_server <- function(id, rv, config) {
     }
 
     # ======================================================================
-    # 5) MAIN processing action
+    # 5) MAIN processing action (WITH progress)
     # ======================================================================
     shiny::observeEvent(input$run_processing, {
+
       if (is.null(rv$mapping) || is.null(rv$ordered_plate_plans)) {
-        notify("Please match raw data to plate plans, transitions and removal files before processing!", type = "error")
+        notify("Please match raw data to plate plans before processing!", type = "error")
         return()
       }
 
       tryCatch({
         cfg <- get_cfg()
 
-        if (is.null(input$period_file))  stop("Please upload the Period Transitions File (Excel).")
-        if (is.null(input$removal_file)) stop("Please upload the Removal Specifications File (Excel).")
+        # use stored files (imported with progress)
+        if (is.null(rv$period_df))  stop("Please upload the Period Transitions File (Excel).")
+        if (is.null(rv$removal_df)) stop("Please upload the Removal Specifications File (Excel).")
 
         shiny::req(rv$raw_xlsx_list, rv$ordered_plate_plans)
 
-        convert_numeric_cols <- function(df, cols) {
-          for (col in intersect(names(df), cols)) {
-            df[[col]] <- as.numeric(gsub(",", ".", as.character(df[[col]])))
-          }
-          df
-        }
+        period_df  <- rv$period_df
+        removal_df <- rv$removal_df
 
-        # ---- load period transitions ----
-        period_df <- readxl::read_excel(input$period_file$datapath)
-        shiny::req(all(c("start", "transition") %in% names(period_df)))
-        period_df$start <- as.numeric(period_df$start)
-        period_df <- period_df[order(period_df$start), , drop = FALSE]
-        add_console_message("✅ Period transitions file loaded successfully.")
+        shiny::withProgress(message = "Processing…", value = 0, {
 
-        # ---- load removal specs ----
-        removal_df <- readxl::read_excel(input$removal_file$datapath)
-        shiny::req("plate_id" %in% names(removal_df))
+          shiny::incProgress(0.02, detail = "Initializing…")
 
-        for (colname in c("remove_time_codes", "remove_wells", "remove_conditions", "remove_periods")) {
-          if (!(colname %in% names(removal_df))) removal_df[[colname]] <- NA_character_
-          removal_df[[colname]] <- as.character(removal_df[[colname]])
-          removal_df[[colname]] <- ifelse(
-            is.na(removal_df[[colname]]) | tolower(trimws(removal_df[[colname]])) %in% c("", "no"),
-            NA_character_,
-            removal_df[[colname]]
-          )
-        }
-        removal_df$plate_id <- suppressWarnings(as.numeric(gsub("Plate", "", removal_df$plate_id)))
-        add_console_message("✅ Removal specifications file loaded successfully.")
-
-        extracted_data_list <- rv$raw_xlsx_list
-        plate_plans         <- rv$ordered_plate_plans
-        n_plates            <- length(plate_plans)
-
-        add_console_message("🔄 Starting data extraction, enrichment, and period assignment...")
-
-        processed_data_list        <- vector("list", n_plates)
-        boundary_associations_list <- vector("list", n_plates)
-
-        for (i in seq_len(n_plates)) {
-          add_console_message("-----")
-          add_console_message(sprintf("Processing plate %d (.xlsx)", i))
-          add_console_message("-----")
-
-          current_plan <- plate_plans[[i]]
-          current_data <- extracted_data_list[[i]]
-
-          if (!is.null(cfg$filter_fn) && is.function(cfg$filter_fn)) {
-            current_data <- cfg$filter_fn(current_data)
-            add_console_message(sprintf("✅ Plate %d - Applied mode-specific filter (if any).", i))
+          convert_numeric_cols <- function(df, cols) {
+            for (col in intersect(names(df), cols)) {
+              df[[col]] <- as.numeric(gsub(",", ".", as.character(df[[col]])))
+            }
+            df
           }
 
-          add_console_message("🔄 Column & condition validation...")
-          required_columns <- c("animal", "condition", "plate_id")
-          missing_cols <- setdiff(required_columns, names(current_plan))
-          if (length(missing_cols) > 0) {
-            stop(sprintf("Plate %d is missing required columns: %s", i, paste(missing_cols, collapse = ", ")))
-          }
-          add_console_message(sprintf("✅ Plate %d - Plate plan validated.", i))
+          extracted_data_list <- rv$raw_xlsx_list
+          plate_plans         <- rv$ordered_plate_plans
+          n_plates            <- length(plate_plans)
 
-          cond_res     <- generate_conditions(current_data, current_plan, i)
-          current_data <- cond_res$data
-          current_plan <- cond_res$plan
-          add_console_message(sprintf("✅ Plate %d - Conditions assigned.", i))
+          add_console_message("🔄 Starting data extraction, enrichment, and period assignment...")
 
-          per_res      <- assign_periods(current_data, period_df, i)
-          current_data <- per_res$data
-          boundaries   <- per_res$boundaries
-          transitions  <- per_res$transitions
-          add_console_message(sprintf("✅ Plate %d - Periods assigned.", i))
+          processed_data_list        <- vector("list", n_plates)
+          boundary_associations_list <- vector("list", n_plates)
 
-          plate_id_num <- suppressWarnings(as.numeric(current_plan$plate_id[1]))
-          removal_row  <- removal_df[removal_df$plate_id == plate_id_num, , drop = FALSE]
+          # allocate ~70% for plates loop
+          for (i in seq_len(n_plates)) {
 
-          if (nrow(removal_row) > 0) {
-            add_console_message("🔄 Applying removal specifications...")
-            rr <- removal_row[1, , drop = FALSE]
-            current_data <- remove_time_codes(current_data, rr, i)
-            current_data <- remove_periods(current_data, rr, i)
-            current_data <- remove_wells(current_data, rr, i)
-            current_data <- remove_conditions(current_data, rr, i)
-            add_console_message("✅ Removal steps completed.")
-          } else {
-            add_console_message("ℹ️ No removal rules for this plate (continuing).")
-          }
-
-          current_data <- convert_numeric_cols(current_data, cfg$convert_cols)
-          add_console_message(sprintf("✅ Plate %d - Numeric columns converted.", i))
-
-          zone_combined <- process_zones(current_data, i)
-          processed_data_list[[i]] <- zone_combined
-
-          boundary_associations_list[[i]] <- data.frame(
-            plate_id    = as.character(current_plan$plate_id[1]),
-            time_switch = boundaries,
-            transition  = transitions,
-            stringsAsFactors = FALSE
-          )
-        }
-
-        add_console_message("\n✅ Data processing completed for all plates!")
-
-        # store main results (xlsx)
-        rv$processing_results <- list(
-          processed_data_list        = processed_data_list,
-          boundary_associations_list = boundary_associations_list
-        )
-
-        # ==================================================================
-        # 6) POST: TXT matching for ZIPs (plate-by-plate)
-        # ==================================================================
-        if (!is.null(rv$raw_zip_list) && length(rv$raw_zip_list) > 0) {
-
-          zip_list  <- rv$raw_zip_list
-          xlsx_list <- rv$raw_xlsx_list
-
-          zip_names <- vapply(zip_list, function(x) as.character((attr(x, "file_name") %||% "")), FUN.VALUE = character(1))
-          xlsx_names <- vapply(xlsx_list, function(x) as.character((attr(x, "file_name") %||% "")), FUN.VALUE = character(1))
-
-          zip_bases  <- zip_base_name(zip_names)
-          xlsx_bases <- xlsx_base_name(xlsx_names)
-
-          idx_xlsx_for_zip <- match(zip_bases, xlsx_bases)
-          if (any(is.na(idx_xlsx_for_zip))) {
-            missing <- zip_names[is.na(idx_xlsx_for_zip)]
-            stop(
-              "Processing stopped: no exact match between ZIP and XLSX names for: ",
-              paste(missing, collapse = ", "),
-              ".\nExpected ZIP base name to exactly match a raw_data .xlsx base name."
-            )
-          }
-
-          # build per-plate containers
-          txt_by_plate <- vector("list", n_plates)
-          names(txt_by_plate) <- paste0("Plate_", seq_len(n_plates))
-
-          zip_xlsx_match <- data.frame(
-            zip_name   = zip_names,
-            xlsx_name  = xlsx_names[idx_xlsx_for_zip],
-            plate_idx  = idx_xlsx_for_zip,
-            stringsAsFactors = FALSE
-          )
-
-          for (k in seq_along(zip_list)) {
-            plate_idx <- idx_xlsx_for_zip[k]
-            zip_nm    <- zip_names[k]
-            xlsx_nm   <- xlsx_names[plate_idx]
-
-            add_console_message("-----")
-            add_console_message(sprintf("TXT post-processing: Plate %d (.txt)", plate_idx))
-            add_console_message("-----")
-            add_console_message(sprintf("✅ ZIP↔XLSX name match: '%s' -> '%s'", zip_nm, xlsx_nm))
-            add_console_message("🔄 Step 1/3: Match wells by 6-char prefix (location ↔ file_txt_name) ...")
-
-            raw_xlsx_k <- xlsx_list[[plate_idx]]
-            zip_txt_k  <- zip_list[[k]]
-
-            txt_k <- match_txt_zip_to_raw_xlsx(raw_xlsx_k, zip_txt_k, n = 6)
-
-            n_total <- nrow(txt_k)
-            n_missing_animal <- sum(is.na(txt_k$animal) | txt_k$animal == "")
-            add_console_message(sprintf("✅ Prefix matching done: %d rows | %d rows without animal after join.", n_total, n_missing_animal))
-
-            add_console_message("🔄 Step 2/3: Enrich with plate meta (plate_id + conditions) ...")
-            proc_k <- rv$processing_results$processed_data_list[[plate_idx]]
-
-            # ---- IMPORTANT: make meta UNIQUE per animal (avoid many-to-many) ----
-            meta_k <- proc_k |>
-              dplyr::select(
-                .data$plate_id, .data$animal,
-                .data$condition, .data$condition_grouped, .data$condition_tagged
-              ) |>
-              dplyr::mutate(
-                animal = trimws(as.character(.data$animal)),
-                plate_id = as.character(.data$plate_id),
-                condition = as.character(.data$condition),
-                condition_grouped = as.character(.data$condition_grouped),
-                condition_tagged = as.character(.data$condition_tagged)
-              ) |>
-              dplyr::group_by(.data$animal) |>
-              dplyr::slice(1) |>
-              dplyr::ungroup()
-
-            # normalize txt animal too
-            txt_k <- txt_k |>
-              dplyr::mutate(animal = trimws(as.character(.data$animal)))
-
-            txt_k <- dplyr::left_join(
-              txt_k,
-              meta_k,
-              by = "animal",
-              relationship = "many-to-one"  # expected: many txt rows -> one meta row
+            shiny::incProgress(
+              amount = 0.70 / max(1, n_plates),
+              detail = sprintf("Processing plate %d/%d (.xlsx)…", i, n_plates)
             )
 
-            # zone: keep it, but it's not reliably derivable here (unless you define it)
-            txt_k <- txt_k |> dplyr::mutate(zone = NA_character_)
+            add_console_message("-----")
+            add_console_message(sprintf("Processing plate %d (.xlsx)", i))
+            add_console_message("-----")
 
-            # ---- debug enrichment success ----
-            n_ok <- sum(!is.na(txt_k$plate_id) & txt_k$plate_id != "")
-            n_na <- sum(is.na(txt_k$plate_id) | txt_k$plate_id == "")
-            add_console_message(sprintf("✅ Enrichment done: %d rows enriched | %d rows missing meta after join.", n_ok, n_na))
+            current_plan <- plate_plans[[i]]
+            current_data <- extracted_data_list[[i]]
 
-            # optional: if you want to see which animals failed (first 10)
-            if (n_na > 0) {
-              bad_animals <- txt_k |>
-                dplyr::filter(is.na(.data$plate_id) | .data$plate_id == "") |>
-                dplyr::distinct(.data$animal) |>
-                dplyr::pull(.data$animal)
-              add_console_message(sprintf("⚠️ Missing meta for animals (sample): %s",
-                                          paste(utils::head(bad_animals, 10), collapse = ", ")))
+            if (!is.null(cfg$filter_fn) && is.function(cfg$filter_fn)) {
+              current_data <- cfg$filter_fn(current_data)
+              add_console_message(sprintf("✅ Plate %d - Applied mode-specific filter (if any).", i))
             }
 
-            add_console_message("🔄 Step 3/3: Assign periods from T using the same transitions file ...")
-            txt_k <- assign_periods_to_txt(txt_k, period_df, cfg)
+            required_columns <- c("animal", "condition", "plate_id")
+            missing_cols <- setdiff(required_columns, names(current_plan))
+            if (length(missing_cols) > 0) {
+              stop(sprintf("Plate %d is missing required columns: %s", i, paste(missing_cols, collapse = ", ")))
+            }
 
-            # keep requested columns
-            txt_k <- txt_k |>
-              dplyr::select(
-                .data$T, .data$X, .data$Y, .data$file_txt_name, .data$animal,
-                .data$plate_id, .data$condition, .data$condition_grouped, .data$condition_tagged,
-                .data$period_with_numbers, .data$period_without_numbers,
-                .data$zone
-              )
+            cond_res     <- generate_conditions(current_data, current_plan, i)
+            current_data <- cond_res$data
+            current_plan <- cond_res$plan
 
-            txt_by_plate[[plate_idx]] <- dplyr::bind_rows(txt_by_plate[[plate_idx]], txt_k)
+            per_res      <- assign_periods(current_data, period_df, i)
+            current_data <- per_res$data
+            boundaries   <- per_res$boundaries
+            transitions  <- per_res$transitions
 
-            add_console_message(sprintf("✅ Plate %d TXT completed: %d rows stored.", plate_idx, nrow(txt_k)))
+            plate_id_num <- suppressWarnings(as.numeric(current_plan$plate_id[1]))
+            removal_row  <- removal_df[removal_df$plate_id == plate_id_num, , drop = FALSE]
+
+            if (nrow(removal_row) > 0) {
+              rr <- removal_row[1, , drop = FALSE]
+              current_data <- remove_time_codes(current_data, rr, i)
+              current_data <- remove_periods(current_data, rr, i)
+              current_data <- remove_wells(current_data, rr, i)
+              current_data <- remove_conditions(current_data, rr, i)
+            }
+
+            current_data   <- convert_numeric_cols(current_data, cfg$convert_cols)
+            zone_combined  <- process_zones(current_data, i)
+
+            processed_data_list[[i]] <- zone_combined
+            boundary_associations_list[[i]] <- data.frame(
+              plate_id    = as.character(current_plan$plate_id[1]),
+              time_switch = boundaries,
+              transition  = transitions,
+              stringsAsFactors = FALSE
+            )
           }
 
-          rv$processing_results$zip_xlsx_match <- zip_xlsx_match
-          rv$processing_results$txt_by_plate   <- txt_by_plate
-          rv$processing_results$txt_all        <- dplyr::bind_rows(txt_by_plate)
+          rv$processing_results <- list(
+            processed_data_list        = processed_data_list,
+            boundary_associations_list = boundary_associations_list
+          )
 
-          add_console_message("✅ TXT results stored plate-by-plate (txt_by_plate) + combined (txt_all).")
-        }
+          shiny::incProgress(0.05, detail = "Finalizing XLSX results…")
+          add_console_message("\n✅ Data processing completed for all plates!")
+
+          # ---- TXT ZIP post-processing ----
+          if (!is.null(rv$raw_zip_list) && length(rv$raw_zip_list) > 0) {
+
+            zip_list  <- rv$raw_zip_list
+            xlsx_list <- rv$raw_xlsx_list
+
+            shiny::incProgress(0.05, detail = "Matching ZIP ↔ XLSX…")
+
+            zip_names  <- vapply(zip_list,  function(x) as.character((attr(x, "file_name") %||% "")), FUN.VALUE = character(1))
+            xlsx_names <- vapply(xlsx_list, function(x) as.character((attr(x, "file_name") %||% "")), FUN.VALUE = character(1))
+
+            zip_bases  <- zip_base_name(zip_names)
+            xlsx_bases <- xlsx_base_name(xlsx_names)
+
+            idx_xlsx_for_zip <- match(zip_bases, xlsx_bases)
+            if (any(is.na(idx_xlsx_for_zip))) {
+              missing <- zip_names[is.na(idx_xlsx_for_zip)]
+              stop(
+                "Processing stopped: no exact match between ZIP and XLSX names for: ",
+                paste(missing, collapse = ", "),
+                ".\nExpected ZIP base name to exactly match a raw_data .xlsx base name."
+              )
+            }
+
+            txt_by_plate <- vector("list", length(rv$ordered_plate_plans))
+            names(txt_by_plate) <- paste0("Plate_", seq_along(txt_by_plate))
+
+            zip_xlsx_match <- data.frame(
+              zip_name   = zip_names,
+              xlsx_name  = xlsx_names[idx_xlsx_for_zip],
+              plate_idx  = idx_xlsx_for_zip,
+              stringsAsFactors = FALSE
+            )
+
+            for (k in seq_along(zip_list)) {
+
+              shiny::incProgress(
+                amount = 0.18 / max(1, length(zip_list)),
+                detail = sprintf("Processing TXT %d/%d (.zip)…", k, length(zip_list))
+              )
+
+              plate_idx  <- idx_xlsx_for_zip[k]
+              raw_xlsx_k <- xlsx_list[[plate_idx]]
+              zip_txt_k  <- zip_list[[k]]
+
+              txt_k <- match_txt_zip_to_raw_xlsx(raw_xlsx_k, zip_txt_k, n = 6)
+
+              proc_k <- rv$processing_results$processed_data_list[[plate_idx]]
+
+              meta_k <- proc_k |>
+                dplyr::select(.data$plate_id, .data$animal, .data$condition, .data$condition_grouped, .data$condition_tagged) |>
+                dplyr::mutate(
+                  animal            = trimws(as.character(.data$animal)),
+                  plate_id          = as.character(.data$plate_id),
+                  condition         = as.character(.data$condition),
+                  condition_grouped = as.character(.data$condition_grouped),
+                  condition_tagged  = as.character(.data$condition_tagged)
+                ) |>
+                dplyr::group_by(.data$animal) |>
+                dplyr::slice(1) |>
+                dplyr::ungroup()
+
+              txt_k <- txt_k |>
+                dplyr::mutate(animal = trimws(as.character(.data$animal))) |>
+                dplyr::left_join(meta_k, by = "animal", relationship = "many-to-one") |>
+                dplyr::mutate(zone = NA_character_)
+
+              txt_k <- assign_periods_to_txt(txt_k, period_df, cfg)
+
+              txt_k <- txt_k |>
+                dplyr::select(
+                  .data$T, .data$X, .data$Y, .data$file_txt_name, .data$animal,
+                  .data$plate_id, .data$condition, .data$condition_grouped, .data$condition_tagged,
+                  .data$period_with_numbers, .data$period_without_numbers,
+                  .data$zone
+                )
+
+              txt_by_plate[[plate_idx]] <- dplyr::bind_rows(txt_by_plate[[plate_idx]], txt_k)
+            }
+
+            rv$processing_results$zip_xlsx_match <- zip_xlsx_match
+            rv$processing_results$txt_by_plate   <- txt_by_plate
+            rv$processing_results$txt_all        <- dplyr::bind_rows(txt_by_plate)
+
+            shiny::incProgress(0.05, detail = "Finalizing TXT results…")
+            add_console_message("✅ TXT results stored plate-by-plate (txt_by_plate) + combined (txt_all).")
+          }
+
+          shiny::incProgress(0.05, detail = "Done.")
+        })
 
         add_console_message("✅ Results stored in rv$processing_results.")
         notify("Processing completed successfully.", type = "message")
@@ -861,7 +895,7 @@ processing_module_server <- function(id, rv, config) {
         shiny::tabPanel("All Plates .xlsx", DT::dataTableOutput(ns("tbl_xlsx_all")))
       ))
 
-      # ---- TXT tabs (plate-by-plate) ----
+      # ---- TXT tabs ----
       has_txt <- !is.null(rv$processing_results$txt_by_plate) &&
         length(rv$processing_results$txt_by_plate) == length(xlsx_list) &&
         any(vapply(rv$processing_results$txt_by_plate, function(x) !is.null(x) && nrow(x) > 0, logical(1)))
@@ -900,7 +934,7 @@ processing_module_server <- function(id, rv, config) {
         DT::datatable(dplyr::bind_rows(xlsx_list), options = list(scrollX = TRUE, pageLength = 25))
       })
 
-      # TXT per-plate + all (if exists)
+      # TXT per-plate + all
       if (!is.null(rv$processing_results$txt_by_plate)) {
         txt_by_plate <- rv$processing_results$txt_by_plate
 
@@ -936,7 +970,7 @@ processing_module_server <- function(id, rv, config) {
         shiny::req(rv$processing_results)
 
         temp_dir <- tempdir()
-        files_to_zip <- c()
+        files_to_zip <- character()
 
         # processed data (xlsx)
         if (length(rv$processing_results$processed_data_list) > 0) {
@@ -960,7 +994,6 @@ processing_module_server <- function(id, rv, config) {
           writexl::write_xlsx(rv$processing_results$txt_all, file.path(temp_dir, "txt_all.xlsx"))
           files_to_zip <- c(files_to_zip, file.path(temp_dir, "txt_all.xlsx"))
 
-          # optional: per-plate txt exports
           if (!is.null(rv$processing_results$txt_by_plate)) {
             for (i in seq_along(rv$processing_results$txt_by_plate)) {
               df <- rv$processing_results$txt_by_plate[[i]]
