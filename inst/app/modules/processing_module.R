@@ -590,23 +590,33 @@ processing_module_server <- function(id, rv, config) {
     }
 
     match_txt_zip_to_raw_xlsx <- function(raw_xlsx, zip_txt, n = 6) {
-      needed_raw <- c("location", "animal")
+
+      # ---- required columns ----
+      needed_raw <- c("location", "animal", "an")
       missing_raw <- setdiff(needed_raw, names(raw_xlsx))
-      if (length(missing_raw) > 0) stop("Raw .xlsx missing required columns: ", paste(missing_raw, collapse = ", "))
+      if (length(missing_raw) > 0) {
+        stop("Raw .xlsx missing required columns: ", paste(missing_raw, collapse = ", "))
+      }
 
       if (!("file_txt_name" %in% names(zip_txt))) stop("ZIP txt df missing 'file_txt_name' column.")
       needed_txt <- c("T", "X", "Y")
       missing_txt <- setdiff(needed_txt, names(zip_txt))
       if (length(missing_txt) > 0) stop("ZIP txt df missing required columns: ", paste(missing_txt, collapse = ", "))
 
+      # ---- build raw map: location prefix -> (animal, zone) ----
       raw_map <- raw_xlsx |>
         dplyr::mutate(
-          loc6 = substr(as.character(.data$location), 1, n),
-          animal = as.character(.data$animal)
+          loc6   = substr(as.character(.data$location), 1, n),
+          animal = trimws(as.character(.data$animal)),
+          zone   = as.character(.data$an)
         ) |>
-        dplyr::filter(!is.na(.data$loc6), .data$loc6 != "", !is.na(.data$animal), .data$animal != "") |>
-        dplyr::distinct(.data$loc6, .data$animal)
+        dplyr::filter(
+          !is.na(.data$loc6), .data$loc6 != "",
+          !is.na(.data$animal), .data$animal != ""
+        ) |>
+        dplyr::distinct(.data$loc6, .data$animal, .data$zone)
 
+      # warn only if SAME prefix -> multiple DIFFERENT animals
       amb <- raw_map |>
         dplyr::count(.data$loc6, name = "n_animals") |>
         dplyr::filter(.data$n_animals > 1)
@@ -619,12 +629,13 @@ processing_module_server <- function(id, rv, config) {
           dplyr::ungroup()
       }
 
+      # ---- join txt -> raw map ----
       txt2 <- zip_txt |>
         dplyr::mutate(txt6 = substr(as.character(.data$file_txt_name), 1, n)) |>
         dplyr::left_join(raw_map, by = c("txt6" = "loc6"))
 
       txt2 |>
-        dplyr::select(.data$T, .data$X, .data$Y, .data$file_txt_name, .data$animal)
+        dplyr::select(.data$T, .data$X, .data$Y, .data$file_txt_name, .data$animal, .data$zone)
     }
 
     assign_periods_to_txt <- function(txt_df, period_df, cfg) {
@@ -689,6 +700,12 @@ processing_module_server <- function(id, rv, config) {
         shiny::withProgress(message = "Processing…", value = 0, {
 
           shiny::incProgress(0.02, detail = "Initializing…")
+          add_console_message("==================================================")
+          add_console_message("🚀 Run processing started.")
+          add_console_message(sprintf("Config: %s", cfg$ui_title %||% "<no ui_title>"))
+          add_console_message(sprintf("Plates detected (.xlsx): %d", length(rv$ordered_plate_plans)))
+          add_console_message(sprintf("ZIP archives detected (.zip): %d", ifelse(is.null(rv$raw_zip_list), 0, length(rv$raw_zip_list))))
+          add_console_message("==================================================")
 
           convert_numeric_cols <- function(df, cols) {
             for (col in intersect(names(df), cols)) {
@@ -701,7 +718,7 @@ processing_module_server <- function(id, rv, config) {
           plate_plans         <- rv$ordered_plate_plans
           n_plates            <- length(plate_plans)
 
-          add_console_message("🔄 Starting data extraction, enrichment, and period assignment...")
+          add_console_message("🔄 Starting XLSX: extraction → condition mapping → period assignment → removals → zones…")
 
           processed_data_list        <- vector("list", n_plates)
           boundary_associations_list <- vector("list", n_plates)
@@ -715,15 +732,22 @@ processing_module_server <- function(id, rv, config) {
             )
 
             add_console_message("-----")
-            add_console_message(sprintf("Processing plate %d (.xlsx)", i))
+            add_console_message(sprintf("📄 XLSX | Plate %d/%d", i, n_plates))
             add_console_message("-----")
 
             current_plan <- plate_plans[[i]]
             current_data <- extracted_data_list[[i]]
 
+            add_console_message(sprintf("Raw XLSX columns: %s", paste(names(current_data), collapse = ", ")))
+            add_console_message(sprintf("Plate plan columns: %s", paste(names(current_plan), collapse = ", ")))
+
+            # filter_fn exists only for Quantization mode (defined in global.R)
             if (!is.null(cfg$filter_fn) && is.function(cfg$filter_fn)) {
+              add_console_message(sprintf("🔎 Plate %d - Quantization filter enabled (cfg$filter_fn). Applying…", i))
               current_data <- cfg$filter_fn(current_data)
-              add_console_message(sprintf("✅ Plate %d - Applied mode-specific filter (if any).", i))
+              add_console_message(sprintf("✅ Plate %d - Quantization filter applied.", i))
+            } else {
+              add_console_message(sprintf("ℹ️ Plate %d - No quantization filter applied (cfg$filter_fn not set for this mode).", i))
             }
 
             required_columns <- c("animal", "condition", "plate_id")
@@ -731,31 +755,45 @@ processing_module_server <- function(id, rv, config) {
             if (length(missing_cols) > 0) {
               stop(sprintf("Plate %d is missing required columns: %s", i, paste(missing_cols, collapse = ", ")))
             }
+            add_console_message(sprintf("✅ Plate %d - Plate plan validated.", i))
 
+            add_console_message(sprintf("🔄 Plate %d - Assigning conditions (condition, condition_grouped, condition_tagged)…", i))
             cond_res     <- generate_conditions(current_data, current_plan, i)
             current_data <- cond_res$data
             current_plan <- cond_res$plan
+            add_console_message(sprintf("✅ Plate %d - Conditions assigned. Columns now: %s", i, paste(names(current_data), collapse = ", ")))
 
+            add_console_message(sprintf("🔄 Plate %d - Assigning periods (period_with_numbers, period_without_numbers)…", i))
             per_res      <- assign_periods(current_data, period_df, i)
             current_data <- per_res$data
             boundaries   <- per_res$boundaries
             transitions  <- per_res$transitions
+            add_console_message(sprintf("✅ Plate %d - Periods assigned. Columns now: %s", i, paste(names(current_data), collapse = ", ")))
 
             plate_id_num <- suppressWarnings(as.numeric(current_plan$plate_id[1]))
             removal_row  <- removal_df[removal_df$plate_id == plate_id_num, , drop = FALSE]
 
             if (nrow(removal_row) > 0) {
+              add_console_message(sprintf("🔄 Plate %d - Applying removal specs for plate_id=%s", i, as.character(current_plan$plate_id[1])))
               rr <- removal_row[1, , drop = FALSE]
               current_data <- remove_time_codes(current_data, rr, i)
               current_data <- remove_periods(current_data, rr, i)
               current_data <- remove_wells(current_data, rr, i)
               current_data <- remove_conditions(current_data, rr, i)
+              add_console_message(sprintf("✅ Plate %d - Removal steps completed.", i))
+            } else {
+              add_console_message(sprintf("ℹ️ Plate %d - No removal rules for this plate (continuing).", i))
             }
 
-            current_data   <- convert_numeric_cols(current_data, cfg$convert_cols)
-            zone_combined  <- process_zones(current_data, i)
+            add_console_message(sprintf("🔄 Plate %d - Converting numeric columns: %s", i, paste(cfg$convert_cols %||% character(), collapse = ", ")))
+            current_data  <- convert_numeric_cols(current_data, cfg$convert_cols)
+            add_console_message(sprintf("✅ Plate %d - Numeric conversion done.", i))
 
+            add_console_message(sprintf("🔄 Plate %d - Processing zones… (zone derived from raw 'an')", i))
+            zone_combined <- process_zones(current_data, i)
             processed_data_list[[i]] <- zone_combined
+            add_console_message(sprintf("✅ Plate %d - Zones processed. Output columns: %s", i, paste(names(zone_combined), collapse = ", ")))
+
             boundary_associations_list[[i]] <- data.frame(
               plate_id    = as.character(current_plan$plate_id[1]),
               time_switch = boundaries,
@@ -770,7 +808,13 @@ processing_module_server <- function(id, rv, config) {
           )
 
           shiny::incProgress(0.05, detail = "Finalizing XLSX results…")
-          add_console_message("\n✅ Data processing completed for all plates!")
+          add_console_message("==================================================")
+          add_console_message("✅ XLSX processing completed for all plates.")
+          add_console_message(sprintf(
+            "Stored: processed_data_list (%d) + boundary_associations_list (%d)",
+            length(processed_data_list), length(boundary_associations_list)
+          ))
+          add_console_message("==================================================")
 
           # ---- TXT ZIP post-processing ----
           if (!is.null(rv$raw_zip_list) && length(rv$raw_zip_list) > 0) {
@@ -782,6 +826,11 @@ processing_module_server <- function(id, rv, config) {
 
             zip_names  <- vapply(zip_list,  function(x) as.character((attr(x, "file_name") %||% "")), FUN.VALUE = character(1))
             xlsx_names <- vapply(xlsx_list, function(x) as.character((attr(x, "file_name") %||% "")), FUN.VALUE = character(1))
+
+            add_console_message("-----")
+            add_console_message("📦 TXT/ZIP post-processing started.")
+            add_console_message(sprintf("ZIP files: %s", paste(zip_names, collapse = " | ")))
+            add_console_message(sprintf("XLSX files: %s", paste(xlsx_names, collapse = " | ")))
 
             zip_bases  <- zip_base_name(zip_names)
             xlsx_bases <- xlsx_base_name(xlsx_names)
@@ -795,6 +844,11 @@ processing_module_server <- function(id, rv, config) {
                 ".\nExpected ZIP base name to exactly match a raw_data .xlsx base name."
               )
             }
+
+            add_console_message("✅ ZIP ↔ XLSX base-name matching OK.")
+            add_console_message(sprintf("ZIP bases:  %s", paste(zip_bases, collapse = " | ")))
+            add_console_message(sprintf("XLSX bases: %s", paste(xlsx_bases, collapse = " | ")))
+            add_console_message(sprintf("Index map (zip->plate_idx): %s", paste(idx_xlsx_for_zip, collapse = ", ")))
 
             txt_by_plate <- vector("list", length(rv$ordered_plate_plans))
             names(txt_by_plate) <- paste0("Plate_", seq_along(txt_by_plate))
@@ -817,12 +871,31 @@ processing_module_server <- function(id, rv, config) {
               raw_xlsx_k <- xlsx_list[[plate_idx]]
               zip_txt_k  <- zip_list[[k]]
 
+              add_console_message("-----")
+              add_console_message(sprintf("🧾 TXT | ZIP %d/%d", k, length(zip_list)))
+              add_console_message(sprintf("ZIP file:  %s", zip_names[k]))
+              add_console_message(sprintf("XLSX link: %s (plate_idx=%d)", xlsx_names[plate_idx], plate_idx))
+
+              add_console_message(sprintf("Raw XLSX columns (for TXT mapping): %s", paste(names(raw_xlsx_k), collapse = ", ")))
+              add_console_message(sprintf("ZIP TXT columns: %s", paste(names(zip_txt_k), collapse = ", ")))
+
+              add_console_message("🔄 Step 1/3: Match wells by 6-char prefix (location ↔ file_txt_name) + attach animal + zone (raw 'an') …")
               txt_k <- match_txt_zip_to_raw_xlsx(raw_xlsx_k, zip_txt_k, n = 6)
 
+              add_console_message(sprintf("✅ Step 1 complete. TXT columns now: %s", paste(names(txt_k), collapse = ", ")))
+              n_total <- nrow(txt_k)
+              n_missing_animal <- sum(is.na(txt_k$animal) | txt_k$animal == "")
+              n_missing_zone   <- sum(is.na(txt_k$zone)   | txt_k$zone   == "")
+              add_console_message(sprintf("Rows: %d | Missing animal: %d | Missing zone: %d", n_total, n_missing_animal, n_missing_zone))
+
+              add_console_message("🔄 Step 2/3: Enrich TXT with plate meta (plate_id + conditions) from processed XLSX …")
               proc_k <- rv$processing_results$processed_data_list[[plate_idx]]
 
               meta_k <- proc_k |>
-                dplyr::select(.data$plate_id, .data$animal, .data$condition, .data$condition_grouped, .data$condition_tagged) |>
+                dplyr::select(
+                  .data$plate_id, .data$animal,
+                  .data$condition, .data$condition_grouped, .data$condition_tagged
+                ) |>
                 dplyr::mutate(
                   animal            = trimws(as.character(.data$animal)),
                   plate_id          = as.character(.data$plate_id),
@@ -834,12 +907,51 @@ processing_module_server <- function(id, rv, config) {
                 dplyr::slice(1) |>
                 dplyr::ungroup()
 
+              add_console_message(sprintf("Meta columns attached: %s", paste(names(meta_k), collapse = ", ")))
+
               txt_k <- txt_k |>
                 dplyr::mutate(animal = trimws(as.character(.data$animal))) |>
-                dplyr::left_join(meta_k, by = "animal", relationship = "many-to-one") |>
-                dplyr::mutate(zone = NA_character_)
+                dplyr::left_join(meta_k, by = "animal", relationship = "many-to-one")
 
+              add_console_message(sprintf("✅ Step 2 complete. TXT columns now: %s", paste(names(txt_k), collapse = ", ")))
+              n_enriched <- sum(!is.na(txt_k$plate_id) & txt_k$plate_id != "")
+              n_not_enriched <- nrow(txt_k) - n_enriched
+              add_console_message(sprintf("Enriched rows (plate_id filled): %d | Missing meta: %d", n_enriched, n_not_enriched))
+
+              if (n_not_enriched > 0) {
+                bad_animals <- txt_k |>
+                  dplyr::filter(is.na(.data$plate_id) | .data$plate_id == "") |>
+                  dplyr::distinct(.data$animal) |>
+                  dplyr::pull(.data$animal)
+                add_console_message(sprintf(
+                  "⚠️ Missing meta for animals (sample): %s",
+                  paste(utils::head(bad_animals, 10), collapse = ", ")
+                ))
+              }
+
+              # ============================================================
+              # NEW: TXT cleanup based on XLSX removals
+              # - if a well/animal was removed during XLSX processing,
+              #   remove corresponding TXT rows as well.
+              # ============================================================
+              add_console_message("🧹 Step 2b/3: Removing TXT rows for wells removed during XLSX processing…")
+              valid_animals <- unique(meta_k$animal)
+              n_before_clean <- nrow(txt_k)
+
+              txt_k <- txt_k |>
+                dplyr::filter(!is.na(.data$animal), .data$animal != "", .data$animal %in% valid_animals)
+
+              n_after_clean <- nrow(txt_k)
+              add_console_message(sprintf(
+                "✅ TXT cleanup done: removed %d rows (animals not present in processed XLSX). Remaining: %d rows.",
+                n_before_clean - n_after_clean, n_after_clean
+              ))
+
+              add_console_message("🔄 Step 3/3: Assign periods from T using the same transitions file …")
               txt_k <- assign_periods_to_txt(txt_k, period_df, cfg)
+
+              add_console_message("✅ Step 3 complete. Period columns attached: period_with_numbers, period_without_numbers")
+              add_console_message(sprintf("Final TXT columns (before select): %s", paste(names(txt_k), collapse = ", ")))
 
               txt_k <- txt_k |>
                 dplyr::select(
@@ -850,6 +962,11 @@ processing_module_server <- function(id, rv, config) {
                 )
 
               txt_by_plate[[plate_idx]] <- dplyr::bind_rows(txt_by_plate[[plate_idx]], txt_k)
+
+              add_console_message(sprintf(
+                "✅ TXT stored for Plate %d: %d rows added | Total plate txt rows: %d",
+                plate_idx, nrow(txt_k), nrow(txt_by_plate[[plate_idx]])
+              ))
             }
 
             rv$processing_results$zip_xlsx_match <- zip_xlsx_match
@@ -857,10 +974,19 @@ processing_module_server <- function(id, rv, config) {
             rv$processing_results$txt_all        <- dplyr::bind_rows(txt_by_plate)
 
             shiny::incProgress(0.05, detail = "Finalizing TXT results…")
-            add_console_message("✅ TXT results stored plate-by-plate (txt_by_plate) + combined (txt_all).")
+            add_console_message("==================================================")
+            add_console_message("✅ TXT results stored:")
+            add_console_message(sprintf("- txt_by_plate: %d plates", length(txt_by_plate)))
+            add_console_message(sprintf("- txt_all: %d rows", nrow(rv$processing_results$txt_all)))
+            add_console_message(sprintf("- zip_xlsx_match: %d rows", nrow(zip_xlsx_match)))
+            add_console_message("==================================================")
+
+          } else {
+            add_console_message("ℹ️ No ZIP provided: skipping TXT post-processing.")
           }
 
           shiny::incProgress(0.05, detail = "Done.")
+          add_console_message("🏁 Processing finished.")
         })
 
         add_console_message("✅ Results stored in rv$processing_results.")
@@ -966,57 +1092,78 @@ processing_module_server <- function(id, rv, config) {
 
     output$download_all_results <- shiny::downloadHandler(
       filename = function() paste0("processing_results_", Sys.Date(), ".zip"),
+      contentType = "application/zip",
       content = function(file) {
         shiny::req(rv$processing_results)
 
-        temp_dir <- tempdir()
+        # unique temp folder to avoid collisions
+        temp_dir <- file.path(tempdir(), paste0("export_", as.integer(Sys.time())))
+        dir.create(temp_dir, recursive = TRUE, showWarnings = FALSE)
+
         files_to_zip <- character()
 
-        # processed data (xlsx)
-        if (length(rv$processing_results$processed_data_list) > 0) {
-          writexl::write_xlsx(
-            dplyr::bind_rows(rv$processing_results$processed_data_list),
-            file.path(temp_dir, "processed_data.xlsx")
-          )
-          files_to_zip <- c(files_to_zip, file.path(temp_dir, "processed_data.xlsx"))
+        write_csv_safe <- function(df, out_path) {
+          if (is.null(df) || nrow(df) == 0) return(character())
+          utils::write.csv(df, out_path, row.names = FALSE)
+          out_path
+        }
+
+        # processed data (from XLSX processing)
+        if (!is.null(rv$processing_results$processed_data_list) &&
+            length(rv$processing_results$processed_data_list) > 0) {
+
+          df_proc <- dplyr::bind_rows(rv$processing_results$processed_data_list)
+          files_to_zip <- c(files_to_zip, write_csv_safe(df_proc, file.path(temp_dir, "processed_data.csv")))
         }
 
         # boundary associations
-        if (length(rv$processing_results$boundary_associations_list) > 0) {
+        if (!is.null(rv$processing_results$boundary_associations_list) &&
+            length(rv$processing_results$boundary_associations_list) > 0) {
+
           boundary_df <- dplyr::bind_rows(rv$processing_results$boundary_associations_list) |>
             dplyr::distinct()
-          writexl::write_xlsx(boundary_df, file.path(temp_dir, "boundary_associations.xlsx"))
-          files_to_zip <- c(files_to_zip, file.path(temp_dir, "boundary_associations.xlsx"))
+
+          files_to_zip <- c(files_to_zip, write_csv_safe(boundary_df, file.path(temp_dir, "boundary_associations.csv")))
         }
 
         # txt all + per plate
-        if (!is.null(rv$processing_results$txt_all) && nrow(rv$processing_results$txt_all) > 0) {
-          writexl::write_xlsx(rv$processing_results$txt_all, file.path(temp_dir, "txt_all.xlsx"))
-          files_to_zip <- c(files_to_zip, file.path(temp_dir, "txt_all.xlsx"))
+        if (!is.null(rv$processing_results$txt_all) &&
+            nrow(rv$processing_results$txt_all) > 0) {
+
+          files_to_zip <- c(files_to_zip, write_csv_safe(rv$processing_results$txt_all, file.path(temp_dir, "txt_all.csv")))
 
           if (!is.null(rv$processing_results$txt_by_plate)) {
             for (i in seq_along(rv$processing_results$txt_by_plate)) {
               df <- rv$processing_results$txt_by_plate[[i]]
               if (!is.null(df) && nrow(df) > 0) {
-                fn <- file.path(temp_dir, paste0("txt_plate_", i, ".xlsx"))
-                writexl::write_xlsx(df, fn)
-                files_to_zip <- c(files_to_zip, fn)
+                fn <- file.path(temp_dir, paste0("txt_plate_", i, ".csv"))
+                files_to_zip <- c(files_to_zip, write_csv_safe(df, fn))
               }
             }
           }
         }
 
-        # zip↔xlsx mapping
+        # zip ↔ xlsx mapping
         if (!is.null(rv$processing_results$zip_xlsx_match) &&
             nrow(rv$processing_results$zip_xlsx_match) > 0) {
-          writexl::write_xlsx(
-            rv$processing_results$zip_xlsx_match,
-            file.path(temp_dir, "zip_xlsx_match.xlsx")
+
+          files_to_zip <- c(
+            files_to_zip,
+            write_csv_safe(rv$processing_results$zip_xlsx_match, file.path(temp_dir, "zip_xlsx_match.csv"))
           )
-          files_to_zip <- c(files_to_zip, file.path(temp_dir, "zip_xlsx_match.xlsx"))
         }
 
-        zip::zip(file, files_to_zip, mode = "cherry-pick")
+        files_to_zip <- unique(files_to_zip)
+        files_to_zip <- files_to_zip[file.exists(files_to_zip)]
+
+        if (length(files_to_zip) == 0) {
+          stop("Nothing to export: no output files were generated.")
+        }
+
+        # ensure target file is clean
+        if (file.exists(file)) unlink(file)
+
+        zip::zip(zipfile = file, files = files_to_zip, mode = "cherry-pick")
       }
     )
 
