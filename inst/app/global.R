@@ -33,12 +33,55 @@ waiting_message_ui <- function() {
   )
 }
 
-# File Reading Utility
+# File Reading Utility (xlsx / zip that contains txt only)
 read_file <- function(path, file_name) {
-  df <- readxl::read_excel(path)
-  attr(df, "file_name") <- file_name
-  df
+  ext <- tolower(tools::file_ext(file_name))
+
+  if (ext == "xlsx") {
+    df <- readxl::read_excel(path)
+    df <- as.data.frame(df)
+    attr(df, "file_name") <- file_name
+    return(df)
+  }
+
+  if (ext == "zip") {
+    tmp <- file.path(
+      tempdir(),
+      paste0("unz_", as.integer(Sys.time()), "_", sample.int(1e6, 1))
+    )
+    dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
+
+    utils::unzip(path, exdir = tmp)
+
+    txt_files <- list.files(
+      tmp,
+      pattern = "\\.txt$",
+      full.names = TRUE,
+      recursive = TRUE
+    )
+    if (!length(txt_files)) {
+      stop("ZIP contains no .txt files: ", file_name)
+    }
+
+    dfs <- lapply(txt_files, function(fp) {
+      txt_name <- tools::file_path_sans_ext(basename(fp))  # e.g. "A01"
+
+      d <- data.table::fread(fp, data.table = FALSE, showProgress = FALSE)
+      d <- as.data.frame(d)
+
+      # Only keep the txt filename as an identifier
+      d$file_txt_name <- txt_name
+      d
+    })
+
+    df <- dplyr::bind_rows(dfs)
+    attr(df, "file_name") <- file_name
+    return(df)
+  }
+
+  stop("Unsupported file type (only .xlsx or .zip): ", file_name)
 }
+
 
 # Notification helper
 notify <- function(msg, type = c("message","warning","error"), duration = 6) {

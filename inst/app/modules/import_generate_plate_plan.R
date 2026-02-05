@@ -8,39 +8,39 @@
 # ----------------------------------------------------------------------
 plate_plan_ui <- function(id) {
   ns <- shiny::NS(id)
-  
+
   shiny::tagList(
     shinyjs::useShinyjs(),
-    
+
     # ---------------- Inputs ----------------
     shiny::fluidRow(
       shinydashboard::box(
         title = "Plate Plan Inputs",
         width = 12,
         shiny::wellPanel(
-          
+
           # Create or Import
           shiny::selectInput(
             ns("create_plate_plan"), "Create New Plate Plan?",
             choices = c("Select an option" = "", "Yes" = "yes", "No" = "no")
           ),
-          
+
           # Create workflow
           shiny::conditionalPanel(
             condition = sprintf("input['%s'] == 'yes'", ns("create_plate_plan")),
             shiny::numericInput(ns("plate_number"), "Number of Plates", value = 1, min = 1),
-            shiny::selectInput(ns("plate_type"), "Plate Type (wells)", 
+            shiny::selectInput(ns("plate_type"), "Plate Type (wells)",
                                choices = c("Select a type" = "", "12", "24", "48", "96")),
             shiny::numericInput(ns("conditions_number"), "Number of Conditions", value = 1, min = 1),
             shiny::textInput(ns("conditions_name"), "Condition Names (semicolon-separated, e.g., pH8.1;CT)", value = ""),
             shiny::numericInput(ns("replicates_number"), "Replicates per Condition", value = 1, min = 1),
             shiny::numericInput(ns("units_per_replicate"), "Units per Replicate", value = 1, min = 1),
-            shiny::selectInput(ns("keep_border_wells"), "Include Border Wells?", 
+            shiny::selectInput(ns("keep_border_wells"), "Include Border Wells?",
                                choices = c("Select an option" = "", "Yes" = "yes", "No" = "no")),
             shiny::numericInput(ns("seed_value"), "Seed for Randomization", value = 42),
             shiny::textInput(ns("plate_plan_name_xlsx"), "Excel File Name Base", value = "plate_plan")
           ),
-          
+
           # Import workflow
           shiny::conditionalPanel(
             condition = sprintf("input['%s'] == 'no'", ns("create_plate_plan")),
@@ -52,12 +52,12 @@ plate_plan_ui <- function(id) {
               `aria-label` = "Upload CSV or Excel files"
             )
           ),
-          
+
           shiny::actionButton(ns("generate_plate_plan"), "Generate/Load Plate Plan")
         )
       )
     ),
-    
+
     # ---------------- Preview + Download ----------------
     shiny::fluidRow(
       shinydashboard::box(
@@ -77,7 +77,7 @@ plate_plan_ui <- function(id) {
 # ----------------------------------------------------------------------
 plate_plan_server <- function(id, rv) {
   shiny::moduleServer(id, function(input, output, session) {
-    
+
     # ---------------- Utility: Detect Plate Type ----------------
     detect_plate_type <- function(df) {
       wells <- sub("_plate_.*", "", df$animal)
@@ -86,10 +86,10 @@ plate_plan_server <- function(id, rv) {
       total <- length(rows) * length(cols)
       if (total %in% c(12, 24, 48, 96)) total else NA
     }
-    
+
     # ---------------- Validation (enable button) ----------------
     shiny::observe({
-      valid <- input$create_plate_plan != "" && 
+      valid <- input$create_plate_plan != "" &&
         (input$create_plate_plan == "no" ||
            (input$plate_type != "" && input$keep_border_wells != "" &&
               input$plate_number > 0 && input$conditions_number > 0 &&
@@ -97,76 +97,109 @@ plate_plan_server <- function(id, rv) {
               !is.na(input$seed_value) && input$conditions_name != ""))
       shinyjs::toggleState("generate_plate_plan", valid)
     })
-    
+
     # ---------------- Generate or Import Plate Plan ----------------
     shiny::observeEvent(input$generate_plate_plan, {
       tryCatch({
         shiny::req(input$create_plate_plan)
-        
-        if (input$create_plate_plan == "yes") {
-          # Parse condition names
-          condition_names <- trimws(unlist(strsplit(input$conditions_name, ";")))
-          if (length(condition_names) != input$conditions_number || any(condition_names == "")) {
-            stop("Invalid condition names: must match number of conditions and not be empty.")
-          }
-          
-          inputs <- list(
-            create_plate_plan     = input$create_plate_plan,
-            plate_type            = input$plate_type,
-            conditions_number     = input$conditions_number,
-            conditions_name       = condition_names,
-            replicates_number     = input$replicates_number,
-            units_per_replicate   = input$units_per_replicate,
-            plate_number          = input$plate_number,
-            keep_border_wells     = input$keep_border_wells,
-            seed_value            = input$seed_value,
-            plate_plan_name_xlsx  = input$plate_plan_name_xlsx,
-            plate_plan_files      = input$plate_plan_files
-          )
-          
-          rv$plate_plan_df_list <- generate_plate_plan_shiny(inputs, write_files = FALSE)
-          rv$plate_plan_type    <- rep(as.integer(input$plate_type), length(rv$plate_plan_df_list))
-          notify("Plate plan generated successfully.", type = "message")
-          
-        } else {
-          shiny::req(input$plate_plan_files)
-          plate_plan_list <- Map(read_file, input$plate_plan_files$datapath, input$plate_plan_files$name)
-          
-          rv$plate_plan_type <- lapply(plate_plan_list, detect_plate_type)
-          for (i in seq_along(plate_plan_list)) {
-            if (!"plate_id" %in% colnames(plate_plan_list[[i]])) {
-              plate_plan_list[[i]]$plate_id <- paste0("plate_", i)
+
+        shiny::withProgress(message = "Generating / loading plate plans...", value = 0, {
+
+          if (input$create_plate_plan == "yes") {
+
+            shiny::incProgress(0.2, detail = "Parsing inputs")
+            condition_names <- trimws(unlist(strsplit(input$conditions_name, ";")))
+            if (length(condition_names) != input$conditions_number || any(condition_names == "")) {
+              stop("Invalid condition names: must match number of conditions and not be empty.")
             }
+
+            inputs <- list(
+              create_plate_plan     = input$create_plate_plan,
+              plate_type            = input$plate_type,
+              conditions_number     = input$conditions_number,
+              conditions_name       = condition_names,
+              replicates_number     = input$replicates_number,
+              units_per_replicate   = input$units_per_replicate,
+              plate_number          = input$plate_number,
+              keep_border_wells     = input$keep_border_wells,
+              seed_value            = input$seed_value,
+              plate_plan_name_xlsx  = input$plate_plan_name_xlsx,
+              plate_plan_files      = input$plate_plan_files
+            )
+
+            shiny::incProgress(0.6, detail = "Generating plate plan(s)")
+            rv$plate_plan_df_list <- generate_plate_plan_shiny(inputs, write_files = FALSE)
+
+            shiny::incProgress(0.2, detail = "Finalizing")
+            rv$plate_plan_type <- rep(as.integer(input$plate_type), length(rv$plate_plan_df_list))
+
+            notify("Plate plan generated successfully.", type = "message")
+
+          } else {
+
+            shiny::req(input$plate_plan_files)
+
+            n <- nrow(input$plate_plan_files)
+            step <- if (n > 0) 1 / n else 1
+
+            plate_plan_list <- lapply(seq_len(n), function(i) {
+              shiny::incProgress(step, detail = input$plate_plan_files$name[i])
+              read_file(input$plate_plan_files$datapath[i], input$plate_plan_files$name[i])
+            })
+
+            rv$plate_plan_type <- lapply(plate_plan_list, detect_plate_type)
+            for (i in seq_along(plate_plan_list)) {
+              if (!"plate_id" %in% colnames(plate_plan_list[[i]])) {
+                plate_plan_list[[i]]$plate_id <- paste0("plate_", i)
+              }
+            }
+
+            rv$plate_plan_df_list <- plate_plan_list
+            notify("Plate plans loaded successfully.", type = "message")
           }
-          rv$plate_plan_df_list <- plate_plan_list
-          notify("Plate plans loaded successfully.", type = "message")
-        }
+        })
+
       }, error = function(e) {
         notify(conditionMessage(e), type = "error", duration = NULL)
         message("Error in generate_plate_plan_shiny: ", conditionMessage(e))
       })
     })
-    
+
     # ---------------- Update Download Choices ----------------
     shiny::observe({
-      if (!is.null(rv$plate_plan_df_list) && length(rv$plate_plan_df_list) > 0) {
-        plate_ids <- vapply(seq_along(rv$plate_plan_df_list), function(i) {
-          file_name <- attr(rv$plate_plan_df_list[[i]], "file_name")
-          if (!is.null(file_name)) file_name else rv$plate_plan_df_list[[i]]$plate_id[1]
+      lst <- rv$plate_plan_df_list
+
+      if (!is.null(lst) && length(lst) > 0) {
+        plate_ids <- vapply(seq_along(lst), function(i) {
+          file_name <- attr(lst[[i]], "file_name")
+          if (!is.null(file_name) && nzchar(file_name)) file_name else lst[[i]]$plate_id[1]
         }, character(1))
-        shiny::updateSelectInput(session, "download_plate_id", choices = plate_ids, selected = plate_ids[1])
+
+        shiny::updateSelectInput(
+          session,
+          "download_plate_id",
+          choices  = plate_ids,
+          selected = plate_ids[1]
+        )
       } else {
-        shiny::updateSelectInput(session, "download_plate_id", choices = NULL, selected = NULL)
+        # IMPORTANT: use character(0), not NULL
+        shiny::updateSelectInput(
+          session,
+          "download_plate_id",
+          choices  = character(0),
+          selected = character(0)
+        )
       }
     })
-    
+
+
     # ---------------- Preview Tabs ----------------
     output$plate_plan_tabs <- shiny::renderUI({
       shiny::req(rv$plate_plan_df_list)
       if (length(rv$plate_plan_df_list) == 0) {
         return(shiny::div("No plate plans generated yet."))
       }
-      
+
       tabs <- lapply(seq_along(rv$plate_plan_df_list), function(i) {
         file_name <- attr(rv$plate_plan_df_list[[i]], "file_name")
         title     <- if (!is.null(file_name)) file_name else rv$plate_plan_df_list[[i]]$plate_id[1]
@@ -174,13 +207,32 @@ plate_plan_server <- function(id, rv) {
           title,
           shiny::tabsetPanel(
             shiny::tabPanel("Table", DT::dataTableOutput(session$ns(paste0("plate_plan_table_", i)))),
-            shiny::tabPanel("Figure", plotly::plotlyOutput(session$ns(paste0("plate_plan_figure_", i))))
+            shiny::tabPanel(
+              "Figure",
+              shiny::fluidRow(
+                shiny::column(
+                  width = 7,
+                  plotly::plotlyOutput(
+                    session$ns(paste0("plate_plan_figure_", i)),
+                    height = "450px",
+                    width  = "100%"
+                  )
+                ),
+                shiny::column(
+                  width = 5,
+                  shiny::tags$div(
+                    style = "text-align:center; font-weight:600; font-size:18px; margin-top:10px; margin-bottom:10px;",
+                    "Wells per condition"
+                  ),
+                  DT::dataTableOutput(session$ns(paste0("plate_plan_counts_", i))))
+              )
+            )
           )
         )
       })
       do.call(shiny::tabsetPanel, tabs)
     })
-    
+
     # ---------------- Render Tables ----------------
     shiny::observe({
       shiny::req(rv$plate_plan_df_list)
@@ -194,7 +246,7 @@ plate_plan_server <- function(id, rv) {
         })
       })
     })
-    
+
     # ---------------- Utility: Process Figures ----------------
     extract_row_col <- function(df) {
       df$Row     <- sub("([A-Z])\\d{2}_plate_\\d", "\\1", df$animal)
@@ -202,7 +254,7 @@ plate_plan_server <- function(id, rv) {
       df$well_id <- sub("_plate_.*", "", df$animal)
       df
     }
-    
+
     get_conditions <- function(df) {
       if ("Condition_Base" %in% colnames(df)) {
         df$Condition     <- df$Condition_Base
@@ -213,41 +265,113 @@ plate_plan_server <- function(id, rv) {
       }
       df
     }
-    
+
     generate_colors <- function(conditions) {
       cols <- scales::hue_pal()(length(conditions))
       stats::setNames(c(cols, "#FFFFFF"), c(conditions, "X"))
     }
-    
+
+    # ---------------- Render Counts (wells per condition) ----------------
+    shiny::observe({
+      shiny::req(rv$plate_plan_df_list)
+
+      lapply(seq_along(rv$plate_plan_df_list), function(i) {
+
+        output[[paste0("plate_plan_counts_", i)]] <- DT::renderDataTable({
+
+          if (is.null(rv$plate_plan_df_list) || length(rv$plate_plan_df_list) < i) {
+            return(NULL)
+          }
+
+          df <- rv$plate_plan_df_list[[i]]
+          df <- extract_row_col(df)
+          df <- get_conditions(df)
+
+          # Count wells per condition (exclude X)
+          counts <- sort(table(df$Condition[df$Condition != "X"]), decreasing = TRUE)
+
+          out <- data.frame(
+            Condition = names(counts),
+            Wells     = as.integer(counts),
+            stringsAsFactors = FALSE
+          )
+
+          # Build the same color mapping as the plot
+          conditions <- unique(df$Condition[df$Condition != "X"])
+          colors <- generate_colors(conditions)
+
+          dt <- DT::datatable(
+            out,
+            rownames = FALSE,
+            class = "compact stripe hover",
+            style = "bootstrap",
+            selection = "single",
+            options = list(
+              dom = "t",
+              paging = FALSE,
+              searching = FALSE,
+              ordering = FALSE,
+              info = FALSE,
+              autoWidth = TRUE,
+              columnDefs = list(
+                list(className = "dt-center", targets = c(0, 1))
+              )
+            )
+          )
+
+          dt <- DT::formatStyle(
+            dt,
+            "Condition",
+            color = DT::styleEqual(names(colors), unname(colors)),
+            fontWeight = "600"
+          )
+
+          dt
+        })
+      })
+    })
+
+
     # ---------------- Render Figures ----------------
     shiny::observe({
       shiny::req(rv$plate_plan_df_list)
+
       lapply(seq_along(rv$plate_plan_df_list), function(i) {
-        output[[paste0("plate_plan_figure_", i)]] <- plotly::renderPlotly({c
+
+        output[[paste0("plate_plan_figure_", i)]] <- plotly::renderPlotly({
+
           if (is.null(rv$plate_plan_df_list) || length(rv$plate_plan_df_list) < i) return(NULL)
           df <- rv$plate_plan_df_list[[i]]
-          
+
           # Condition check
           if (!("condition" %in% names(df) || "Condition_Base" %in% names(df))) {
-            return(plotly::plot_ly() %>%
-                     plotly::layout(title = paste("Plate", i, "Layout"),
-                                    annotations = list(text = "No valid conditions", showarrow = FALSE)))
+            fig <- plotly::plot_ly()
+            return(plotly::layout(
+              fig,
+              title = paste("Plate", i, "Layout"),
+              annotations = list(list(text = "No valid conditions", showarrow = FALSE))
+            ))
           }
-          
-          df <- extract_row_col(df) |> get_conditions()
+
+          df <- extract_row_col(df)
+          df <- get_conditions(df)
+
           conditions <- unique(df$Condition[df$Condition != "X"])
           if (length(conditions) == 0) {
-            return(plotly::plot_ly() %>%
-                     plotly::layout(title = paste("Plate", i, "Layout"),
-                                    annotations = list(text = "No valid conditions found", showarrow = FALSE)))
+            fig <- plotly::plot_ly()
+            return(plotly::layout(
+              fig,
+              title = paste("Plate", i, "Layout"),
+              annotations = list(list(text = "No valid conditions found", showarrow = FALSE))
+            ))
           }
-          
+
           plate_type <- as.character(rv$plate_plan_type[[i]])
           if (is.na(plate_type)) {
-            return(plotly::plot_ly() %>%
-                     plotly::layout(title = paste("Plate", i, "- Unknown format")))
+            fig <- plotly::plot_ly()
+            return(plotly::layout(fig, title = paste("Plate", i, "- Unknown format")))
           }
-          
+
           # Well configs
           config <- list(
             "12" = list(rows = LETTERS[1:3], cols = 1:4),
@@ -255,31 +379,37 @@ plate_plan_server <- function(id, rv) {
             "48" = list(rows = LETTERS[1:6], cols = 1:8),
             "96" = list(rows = LETTERS[1:8], cols = 1:12)
           )[[plate_type]]
-          
+
           grid <- expand.grid(Row = config$rows, Column = config$cols)
           grid$Row    <- factor(grid$Row, levels = rev(config$rows))
           grid$Column <- factor(grid$Column, levels = as.character(seq_along(config$cols)))
           df$Column   <- factor(df$Column, levels = as.character(seq_along(config$cols)))
           df          <- merge(grid, df, by = c("Row", "Column"), all.x = TRUE)
           df$Condition <- ifelse(is.na(df$Condition), "X", df$Condition)
-          
+
           colors <- generate_colors(conditions)
-          
+
           p <- ggplot2::ggplot(df, ggplot2::aes(x = Column, y = Row, fill = Condition)) +
             ggplot2::geom_tile(color = "black") +
-            ggplot2::geom_text(ggplot2::aes(label = well_id), size = 2, color = "black") +
+            ggplot2::geom_text(ggplot2::aes(label = well_id), size = 4, color = "black") +
             ggplot2::scale_fill_manual(values = colors) +
             ggplot2::labs(title = paste("Plate", i, "Layout"), x = "Column", y = "Row") +
             ggplot2::theme_minimal() +
-            ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 0),
-                           panel.grid = ggplot2::element_blank())
-          
-          plotly::ggplotly(p, width = 600, height = 600 * (length(config$rows) / length(config$cols))) %>%
-            plotly::layout(margin = list(l = 50, r = 50, b = 50, t = 50))
+            ggplot2::theme(
+              axis.text.x = ggplot2::element_text(angle = 0),
+              panel.grid  = ggplot2::element_blank()
+            )
+
+          fig <- plotly::ggplotly(
+            p,
+            height = 450
+          )
+
+          plotly::layout(fig, margin = list(l = 50, r = 50, b = 50, t = 50))
         })
       })
     })
-    
+
     # ---------------- Download (Single) ----------------
     output$download_plate_plan <- shiny::downloadHandler(
       filename = function() sprintf("%s_%s.xlsx", input$plate_plan_name_xlsx, input$download_plate_id),
@@ -290,7 +420,7 @@ plate_plan_server <- function(id, rv) {
         notify("Plate plan downloaded.", type = "message")
       }
     )
-    
+
     # ---------------- Download (All as ZIP) ----------------
     output$download_all_plate_plans <- shiny::downloadHandler(
       filename = function() paste0(input$plate_plan_name_xlsx, "_all.zip"),
@@ -313,7 +443,7 @@ plate_plan_server <- function(id, rv) {
 # ----------------------------------------------------------------------
 generate_plate_plan_shiny <- function(inputs, plan_dir = "inputs/plate_plans", write_files = FALSE) {
   if (write_files && !dir.exists(plan_dir)) dir.create(plan_dir, recursive = TRUE)
-  
+
   if (inputs$create_plate_plan == "yes") {
     # --- Setup
     plate_type   <- as.integer(inputs$plate_type)
@@ -325,7 +455,7 @@ generate_plate_plan_shiny <- function(inputs, plan_dir = "inputs/plate_plans", w
     border_pref  <- inputs$keep_border_wells
     seed_val     <- inputs$seed_value
     base_xlsx    <- inputs$plate_plan_name_xlsx
-    
+
     # --- Plate configs
     well_configs <- list(
       "12" = list(rows = LETTERS[1:3], cols = 1:4,
@@ -343,15 +473,15 @@ generate_plate_plan_shiny <- function(inputs, plan_dir = "inputs/plate_plans", w
                              paste0("H", sprintf("%02d", 1:12))))
     )
     config <- well_configs[[as.character(plate_type)]]
-    
+
     wells_template  <- with(expand.grid(Row = config$rows, Column = config$cols), paste0(Row, sprintf("%02d", Column)))
     available_wells <- if (tolower(border_pref) %in% c("no", "n")) setdiff(wells_template, config$border) else wells_template
     available_total <- length(available_wells) * plate_number
     total_units     <- cond_n * repl_n * units_n
     if (total_units > available_total) stop("Total units exceed available wells.")
-    
+
     set.seed(seed_val)
-    
+
     # --- Distribute conditions across plates
     cond_by_plate <- lapply(cond_names, function(cond) {
       total_c <- repl_n * units_n
@@ -362,19 +492,19 @@ generate_plate_plan_shiny <- function(inputs, plan_dir = "inputs/plate_plans", w
       counts
     })
     names(cond_by_plate) <- cond_names
-    
+
     plate_plan_list <- vector("list", plate_number)
     for (i in seq_len(plate_number)) {
       labels <- unlist(mapply(function(cond, counts) {
         unlist(mapply(function(r, cnt) rep(paste0(cond, "_", r), cnt),
                       seq_len(repl_n), rep(counts[i] / repl_n, repl_n), SIMPLIFY = FALSE))
       }, cond_names, cond_by_plate, SIMPLIFY = FALSE))
-      
+
       plate_assign <- rep("X", length(wells_template))
       avail_idx    <- if (tolower(border_pref) %in% c("no", "n")) which(!wells_template %in% config$border) else seq_along(wells_template)
       choice_idx   <- sample(avail_idx, length(labels))
       plate_assign[choice_idx] <- labels
-      
+
       df <- data.frame(
         animal    = paste0(wells_template, "_plate_", i),
         condition = plate_assign,
@@ -382,7 +512,7 @@ generate_plate_plan_shiny <- function(inputs, plan_dir = "inputs/plate_plans", w
         stringsAsFactors = FALSE
       )
       attr(df, "file_name") <- sprintf("%s_plate_%d.xlsx", base_xlsx, i)
-      
+
       if (write_files) {
         xlsx_path <- file.path(plan_dir, sprintf("%s_plate_%d.xlsx", base_xlsx, i))
         openxlsx::write.xlsx(df, xlsx_path, rowNames = FALSE)
@@ -395,3 +525,7 @@ generate_plate_plan_shiny <- function(inputs, plan_dir = "inputs/plate_plans", w
     Map(read_file, inputs$plate_plan_files$datapath, inputs$plate_plan_files$name)
   }
 }
+
+# ======================================================================
+# End of import_generate_plate_plan.R
+# ======================================================================

@@ -1,5 +1,5 @@
 # ======================================================================
-# ui.R – Zebrabox Treatment Dashboard (v1.0)
+# ui.R – Zebrabox Treatment Dashboard (v1.1)
 # ======================================================================
 
 # Load required libraries
@@ -165,15 +165,15 @@ header_styles <- shiny::tags$head(
       border-radius: 0 0 15px 15px !important;
       padding: 15px !important;
     }
-    
+
     /* Delta Time Explorer title (light & dark) */
     .delta-time-title { color: #2c3e50; }
     [data-theme="dark"] .delta-time-title { color: #FFF !important; }
-    
+
     /* Delta Time help text (light & dark) */
     .delta-time-help { color: #555; }
     [data-theme="dark"] .delta-time-help { color: #DDD !important; }
-    
+
     /* Dark Theme */
     [data-theme="dark"] .main-header { background-color: #222d32 !important; color: #FFF !important; }
     [data-theme="dark"] .main-sidebar { background-color: #222d32 !important; color: #FFF !important; }
@@ -403,7 +403,7 @@ welcome_content <- shinydashboard::tabItem(
       shiny::p("Generate randomized plate layouts, import and process raw data, and visualize results in multiple modes.",
                class = "welcome-subtitle",
                style = "font-size: 1.38em; line-height: 1.6; margin-bottom: 35px; max-width: 920px; margin-left: auto; margin-right: auto; font-style: italic;"),
-      
+
       shiny::div(
         class = "fade-in logo-fade",
         style = "display: flex; justify-content: center; align-items: center; gap: 60px; margin: 30px 0 60px 0; flex-wrap: wrap; opacity: 0;",
@@ -464,14 +464,14 @@ global_footer <- shiny::tags$footer(
         class = "app-footer",
         shiny::HTML("
           <div>
-            Powered by 
+            Powered by
             <a href='https://www.viewpoint.fr/' target='_blank'>ViewPoint Behavior Technology</a>
             &nbsp;&nbsp;|&nbsp;&nbsp;
-            Developed by 
+            Developed by
             <a href='https://www.linkedin.com/in/antoine-tourret-b70672175/' target='_blank'>Antoine Tourret</a>
           </div>
           <div style='margin-top: 8px; font-size: 0.9em;'>
-            © 2025 Zebrabox Pipeline • v1.0
+            © 2025 Zebrabox Pipeline • v1.1
           </div>
         ")
       )

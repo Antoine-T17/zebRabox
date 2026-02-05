@@ -1,7 +1,7 @@
 Package: zebRabox
 Type: Package
 Title: ZebRabox Shiny Application
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: 
     person("Antoine", "Tourret", email = "antoinetourretpro@gmail.com", role = c("aut", "cre"))
 Maintainer: Antoine Tourret <antoinetourretpro@gmail.com>
