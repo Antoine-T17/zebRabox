@@ -170,19 +170,32 @@ plate_plan_server <- function(id, rv) {
       lst <- rv$plate_plan_df_list
 
       if (!is.null(lst) && length(lst) > 0) {
-        plate_ids <- vapply(seq_along(lst), function(i) {
-          file_name <- attr(lst[[i]], "file_name")
-          if (!is.null(file_name) && nzchar(file_name)) file_name else lst[[i]]$plate_id[1]
+        # valeur stable pour le serveur
+        values <- vapply(lst, function(df) {
+          if (!"plate_id" %in% names(df) || nrow(df) == 0) return(NA_character_)
+          as.character(df$plate_id[1])
         }, character(1))
+
+        # label affiché à l'utilisateur
+        labels <- vapply(seq_along(lst), function(i) {
+          file_name <- attr(lst[[i]], "file_name")
+          if (!is.null(file_name) && nzchar(file_name)) {
+            as.character(file_name)
+          } else {
+            as.character(values[i])
+          }
+        }, character(1))
+
+        ok <- !is.na(values) & nzchar(values)
+        choices <- stats::setNames(values[ok], labels[ok])  # label -> value
 
         shiny::updateSelectInput(
           session,
           "download_plate_id",
-          choices  = plate_ids,
-          selected = plate_ids[1]
+          choices = choices,
+          selected = if (length(values[ok]) > 0) values[ok][1] else character(0)
         )
       } else {
-        # IMPORTANT: use character(0), not NULL
         shiny::updateSelectInput(
           session,
           "download_plate_id",
@@ -412,14 +425,28 @@ plate_plan_server <- function(id, rv) {
 
     # ---------------- Download (Single) ----------------
     output$download_plate_plan <- shiny::downloadHandler(
-      filename = function() sprintf("%s_%s.xlsx", input$plate_plan_name_xlsx, input$download_plate_id),
-      content = function(file) {
+      filename = function() {
         shiny::req(input$download_plate_id)
-        idx <- which(vapply(rv$plate_plan_df_list, function(df) df$plate_id[1], "") == input$download_plate_id)
+        base <- input$plate_plan_name_xlsx
+        if (is.null(base) || !nzchar(base)) base <- "plate_plan"
+        sprintf("%s_%s.xlsx", base, input$download_plate_id)
+      },
+      contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      content = function(file) {
+        shiny::req(rv$plate_plan_df_list, input$download_plate_id)
+
+        ids <- vapply(rv$plate_plan_df_list, function(df) {
+          if (!"plate_id" %in% names(df) || nrow(df) == 0) return(NA_character_)
+          as.character(df$plate_id[1])
+        }, character(1))
+
+        idx <- which(ids == as.character(input$download_plate_id))
+        shiny::validate(shiny::need(length(idx) == 1, "Plate introuvable pour le téléchargement."))
+
         openxlsx::write.xlsx(rv$plate_plan_df_list[[idx]], file, rowNames = FALSE)
-        notify("Plate plan downloaded.", type = "message")
       }
     )
+
 
     # ---------------- Download (All as ZIP) ----------------
     output$download_all_plate_plans <- shiny::downloadHandler(
@@ -512,7 +539,6 @@ generate_plate_plan_shiny <- function(inputs, plan_dir = "inputs/plate_plans", w
         stringsAsFactors = FALSE
       )
       attr(df, "file_name") <- sprintf("%s_plate_%d.xlsx", base_xlsx, i)
-
       if (write_files) {
         xlsx_path <- file.path(plan_dir, sprintf("%s_plate_%d.xlsx", base_xlsx, i))
         openxlsx::write.xlsx(df, xlsx_path, rowNames = FALSE)
