@@ -26,26 +26,27 @@ light_theme <- function(base_size = 11, base_family = "") {
 dark_theme <- function(base_size = 11, base_family = "") {
   ggplot2::theme_bw(base_size = base_size, base_family = base_family) +
     ggplot2::theme(
-    plot.title   = ggplot2::element_text(color = "white", size = 16, hjust = .5),
-    axis.text    = ggplot2::element_text(color = "white", size = 16),
-    axis.title.x = ggplot2::element_text(color = "white", size = 16, margin = ggplot2::margin(t = 5, r = 15)),
-    axis.title.y = ggplot2::element_text(color = "white", size = 16, angle = 90, margin = ggplot2::margin(r = 10)),
-    legend.position = "right",
-    legend.text  = ggplot2::element_text(color = "white", size = 16, face = "italic"),
-    legend.title = ggplot2::element_blank(),
-    legend.background = ggplot2::element_rect(fill = "black"),
-    legend.key   = ggplot2::element_rect(fill = "black"),
-    strip.text.x = ggplot2::element_text(color = "white", size = 16),
-    strip.background = ggplot2::element_rect(fill = "black", color = "white"),
-    plot.background  = ggplot2::element_rect(fill = "black"),
-    panel.background = ggplot2::element_rect(fill = "black", colour = "white"),
-    panel.border     = ggplot2::element_rect(color = "white", fill = NA),
-    panel.grid.major = ggplot2::element_line(color = "grey30"),
-    panel.grid.minor = ggplot2::element_line(color = "grey30"),
-    plot.caption = ggplot2::element_text(color = "white", size = 16, hjust = 1, margin = ggplot2::margin(t = 10))
-  )
+      plot.title   = ggplot2::element_text(color = "white", size = 16, hjust = .5),
+      axis.text    = ggplot2::element_text(color = "white", size = 16),
+      axis.title.x = ggplot2::element_text(color = "white", size = 16, margin = ggplot2::margin(t = 5, r = 15)),
+      axis.title.y = ggplot2::element_text(color = "white", size = 16, angle = 90, margin = ggplot2::margin(r = 10)),
+      legend.position = "right",
+      legend.text  = ggplot2::element_text(color = "white", size = 16, face = "italic"),
+      legend.title = ggplot2::element_blank(),
+      legend.background = ggplot2::element_rect(fill = "black"),
+      legend.key   = ggplot2::element_rect(fill = "black"),
+      strip.text.x = ggplot2::element_text(color = "white", size = 16),
+      strip.background = ggplot2::element_rect(fill = "black", color = "white"),
+      plot.background  = ggplot2::element_rect(fill = "black"),
+      panel.background = ggplot2::element_rect(fill = "black", colour = "white"),
+      panel.border     = ggplot2::element_rect(color = "white", fill = NA),
+      panel.grid.major = ggplot2::element_line(color = "grey30"),
+      panel.grid.minor = ggplot2::element_line(color = "grey30"),
+      plot.caption = ggplot2::element_text(color = "white", size = 16, hjust = 1, margin = ggplot2::margin(t = 10))
+    )
 }
 
+# ---- UI ---------------------------------------------------------------
 # ---- UI ---------------------------------------------------------------
 visualization_module_ui <- function(id, config) {
   ns  <- shiny::NS(id)
@@ -55,7 +56,7 @@ visualization_module_ui <- function(id, config) {
   shiny::tagList(
     # Ensure ggiraph stretches nicely inside shinydashboard boxes
     shiny::tags$head(
-      shiny::tags$style(HTML(
+      shiny::tags$style(shiny::HTML(
         sprintf("
           #%s .girafe_container, #%s .girafe_container svg { width:100%% !important; }
           #%s .girafe_container { overflow: visible; }
@@ -67,105 +68,139 @@ visualization_module_ui <- function(id, config) {
       shinydashboard::box(
         title = paste("Visualization Inputs —", cfg$ui_title), width = 4,
 
-        shiny::selectInput(ns("plot_type"), "Plot Type",
-                           c("boxplot_periods","boxplot_cumulate","boxplot_delta","lineplot"),
-                           selected = "boxplot_periods"
-        ),
-        shiny::div(style = "margin-bottom:20px;"),
-        shiny::selectInput(ns("response_var"), "Response Variable", choices = "", selected = ""),
+        # ==============================================================
+        # SOURCE TABS ONLY: XLSX / TXT
+        # ==============================================================
+        shiny::tabsetPanel(
+          id = ns("data_source_tabs"),
 
-        # --- Periods boxplots ---
-        shiny::conditionalPanel(
-          condition = cond("plot_type","boxplot_periods"),
-          shiny::actionButton(ns("generate_periods_dfs"), paste0("Generate ", cfg$period_ui_name, " Datasets")),
-          shiny::div(style = "margin-bottom:16px;"),
-          shiny::radioButtons(ns("boxplot_periods_mode"), "Boxplot Mode",
-                              c("separated","pooled"), "separated", inline = TRUE
-          ),
-          shiny::conditionalPanel(
-            condition = paste(cond("boxplot_periods_mode","pooled"), "&&", cond("plot_type","boxplot_periods")),
-            shiny::textInput(
-              ns("boxplot_periods_colors"),
-              paste0(cfg$period_ui_name, " Colors (comma-separated hex)"),
-              value = cfg$period_default_colors
+          # ---------------- XLSX ----------------
+          shiny::tabPanel(
+            title = "XLSX", value = "xlsx",
+
+            # (ancienne UI, inchangée)
+            shiny::selectInput(ns("plot_type"), "Plot Type",
+                               c("boxplot_periods","boxplot_cumulate","boxplot_delta","lineplot"),
+                               selected = "boxplot_periods"
+            ),
+            shiny::div(style = "margin-bottom:20px;"),
+            shiny::selectInput(ns("response_var"), "Response Variable", choices = "", selected = ""),
+
+            # --- Periods boxplots ---
+            shiny::conditionalPanel(
+              condition = cond("plot_type","boxplot_periods"),
+              shiny::actionButton(ns("generate_periods_dfs"), paste0("Generate ", cfg$period_ui_name, " Datasets")),
+              shiny::div(style = "margin-bottom:16px;"),
+
+              shiny::radioButtons(
+                ns("boxplot_periods_mode"), "Boxplot Mode",
+                c("separated","pooled"), "separated", inline = TRUE
+              ),
+
+              # NEW: keep only dark_1 / dark_1+dark_2 etc. (empty = keep all)
+              shiny::textInput(
+                ns("period_indices_keep"),
+                "Keep only period indices (e.g. 1 or 1,2). Empty = keep all",
+                value = ""
+              ),
+
+              shiny::conditionalPanel(
+                condition = paste(cond("boxplot_periods_mode","pooled"), "&&", cond("plot_type","boxplot_periods")),
+                shiny::textInput(
+                  ns("boxplot_periods_colors"),
+                  paste0(cfg$period_ui_name, " Colors (comma-separated hex)"),
+                  value = cfg$period_default_colors
+                )
+              )
+            ),
+
+            # --- Cumulative ---
+            shiny::conditionalPanel(
+              condition = cond("plot_type","boxplot_cumulate"),
+              shiny::actionButton(ns("generate_cumulate_dfs"), "Generate Cumulative Datasets"),
+              shiny::div(style = "margin-bottom:16px;")
+            ),
+
+            # --- Delta ---
+            shiny::conditionalPanel(
+              condition = cond("plot_type","boxplot_delta"),
+              shiny::uiOutput(ns("transition_select_ui")),
+              shiny::sliderInput(ns("delta_time"), "Delta Time Window (seconds)",
+                                 min = 5, max = 500, value = 60, step = 5, width = "100%"
+              ),
+              shiny::actionButton(ns("generate_delta_dfs"), "Generate Delta Datasets"),
+              shiny::div(style = "margin-bottom:16px;"),
+              shiny::radioButtons(ns("boxplot_delta_mode"), "Boxplot Mode",
+                                  c("separated","pooled"), "separated", inline = TRUE
+              ),
+              shiny::conditionalPanel(
+                condition = paste(cond("boxplot_delta_mode","pooled"), "&&", cond("plot_type","boxplot_delta")),
+                shiny::textInput(
+                  ns("boxplot_delta_phase_colors"),
+                  "Phase Colors (Before, Switch, After; comma-separated hex)",
+                  value = "#FF6F61, #40C4FF, #4CAF50"
+                )
+              )
+            ),
+
+            # --- Lineplot ---
+            shiny::conditionalPanel(
+              condition = cond("plot_type","lineplot"),
+              shiny::radioButtons(ns("time_unit_convert"), "Convert Time Unit?",
+                                  c("Yes","No"), "No", inline = TRUE
+              ),
+              shiny::conditionalPanel(
+                condition = cond("time_unit_convert","Yes"),
+                shiny::selectInput(ns("time_unit_original"), "Original Time Unit", c("seconds","minutes","hours","days"), "seconds"),
+                shiny::selectInput(ns("time_unit_target"), "Target Time Unit",   c("seconds","minutes","hours","days"), "minutes")
+              ),
+              shiny::conditionalPanel(
+                condition = cond("time_unit_convert","No"),
+                shiny::selectInput(ns("time_unit_original"), "Time Unit", c("seconds","minutes","hours","days"), "seconds")
+              ),
+              shiny::uiOutput(ns("aggregation_period_label")),
+              shiny::radioButtons(ns("lineplot_error_mode"), "Error Representation",
+                                  c("Error Bars" = "error_bar", "95% CI" = "ci95"),
+                                  "error_bar", inline = TRUE
+              ),
+              shiny::actionButton(ns("generate_lineplot_dfs"), "Generate Lineplot Datasets"),
+              shiny::div(style = "margin-bottom:16px;")
+            ),
+
+            # --- Global ordering & colors ---
+            shiny::textInput(ns("condition_grouped_order"), "Condition Order (comma-separated)",
+                             value = "", placeholder = "e.g., cond1, cond2, cond3"
+            ),
+            shiny::textInput(ns("condition_grouped_color"), "Condition Colors (comma-separated hex)",
+                             value = "", placeholder = "e.g., #FF0000, #00FF00, #0000FF"
+            ),
+
+            shiny::uiOutput(ns("conditions_filter_ui")),
+            shiny::div(style = "margin-bottom:10px;"),
+
+            shiny::uiOutput(ns("figure_selector")),
+            shiny::div(style = "display:flex; flex-direction:column; gap:10px;",
+                       shiny::actionButton(ns("generate_figure"), "Generate Figure", style = "width:100%;"),
+                       shiny::conditionalPanel(
+                         condition = cond("plot_type","boxplot_delta"),
+                         shiny::actionButton(ns("generate_delta_tables"), "Generate Delta Percentage Tables", style = "width:100%;")
+                       )
             )
+          ),
+
+          # ---------------- TXT ----------------
+          shiny::tabPanel(
+            title = "TXT", value = "txt",
+            shiny::helpText("TXT workflow placeholder. You can wire TXT controls here while keeping XLSX unchanged."),
+            shiny::div(style = "margin-top:10px;"),
+            shiny::p("For now, use XLSX tab for full visualization workflow.")
           )
-        ),
-
-        # --- Cumulative ---
-        shiny::conditionalPanel(
-          condition = cond("plot_type","boxplot_cumulate"),
-          shiny::actionButton(ns("generate_cumulate_dfs"), "Generate Cumulative Datasets"),
-          shiny::div(style = "margin-bottom:16px;")
-        ),
-
-        # --- Delta ---
-        shiny::conditionalPanel(
-          condition = cond("plot_type","boxplot_delta"),
-          shiny::uiOutput(ns("transition_select_ui")),
-          shiny::sliderInput(ns("delta_time"), "Delta Time Window (seconds)",
-                             min = 5, max = 500, value = 60, step = 5, width = "100%"
-          ),
-          shiny::actionButton(ns("generate_delta_dfs"), "Generate Delta Datasets"),
-          shiny::div(style = "margin-bottom:16px;"),
-          shiny::radioButtons(ns("boxplot_delta_mode"), "Boxplot Mode",
-                              c("separated","pooled"), "separated", inline = TRUE
-          ),
-          shiny::conditionalPanel(
-            condition = paste(cond("boxplot_delta_mode","pooled"), "&&", cond("plot_type","boxplot_delta")),
-            shiny::textInput(
-              ns("boxplot_delta_phase_colors"),
-              "Phase Colors (Before, Switch, After; comma-separated hex)",
-              value = "#FF6F61, #40C4FF, #4CAF50"
-            )
-          )
-        ),
-
-        # --- Lineplot ---
-        shiny::conditionalPanel(
-          condition = cond("plot_type","lineplot"),
-          shiny::radioButtons(ns("time_unit_convert"), "Convert Time Unit?",
-                              c("Yes","No"), "No", inline = TRUE
-          ),
-          shiny::conditionalPanel(
-            condition = cond("time_unit_convert","Yes"),
-            shiny::selectInput(ns("time_unit_original"), "Original Time Unit", c("seconds","minutes","hours","days"), "seconds"),
-            shiny::selectInput(ns("time_unit_target"), "Target Time Unit",   c("seconds","minutes","hours","days"), "minutes")
-          ),
-          shiny::conditionalPanel(
-            condition = cond("time_unit_convert","No"),
-            shiny::selectInput(ns("time_unit_original"), "Time Unit", c("seconds","minutes","hours","days"), "seconds")
-          ),
-          shiny::uiOutput(ns("aggregation_period_label")),
-          shiny::radioButtons(ns("lineplot_error_mode"), "Error Representation",
-                              c("Error Bars" = "error_bar", "95% CI" = "ci95"),
-                              "error_bar", inline = TRUE
-          ),
-          shiny::actionButton(ns("generate_lineplot_dfs"), "Generate Lineplot Datasets"),
-          shiny::div(style = "margin-bottom:16px;")
-        ),
-
-        # --- Global ordering & colors ---
-        shiny::textInput(ns("condition_grouped_order"), "Condition Order (comma-separated)",
-                         value = "", placeholder = "e.g., cond1, cond2, cond3"
-        ),
-        shiny::textInput(ns("condition_grouped_color"), "Condition Colors (comma-separated hex)",
-                         value = "", placeholder = "e.g., #FF0000, #00FF00, #0000FF"
-        ),
-
-        shiny::uiOutput(ns("conditions_filter_ui")),
-        shiny::div(style = "margin-bottom:10px;"),
-
-        shiny::uiOutput(ns("figure_selector")),
-        shiny::div(style = "display:flex; flex-direction:column; gap:10px;",
-                   shiny::actionButton(ns("generate_figure"), "Generate Figure", style = "width:100%;"),
-                   shiny::conditionalPanel(
-                     condition = cond("plot_type","boxplot_delta"),
-                     shiny::actionButton(ns("generate_delta_tables"), "Generate Delta Percentage Tables", style = "width:100%;")
-                   )
         )
       ),
 
+      # ------------------------------------------------------------------
+      # Right output panel (inchangé)
+      # ------------------------------------------------------------------
       shinydashboard::box(
         title = "Visualization Output", width = 8,
         shiny::div(style = "margin-bottom:10px;",
@@ -358,7 +393,9 @@ visualization_module_server <- function(id, rv, config) {
       labels  <- cfg$period_labels %||% keys
       if (is.null(keys) || length(keys) == 0) stop("Configuration error: 'period_keys' is empty.")
 
-      found_keys <- character(0); found_labels <- character(0)
+      found_keys <- character(0)
+      found_labels <- character(0)
+
       for (i in seq_along(keys)) {
         p_match <- grep(keys[i], periods, ignore.case = TRUE, value = TRUE)
         if (length(p_match) > 0) {
@@ -366,15 +403,37 @@ visualization_module_server <- function(id, rv, config) {
           found_labels <- c(found_labels, labels[i])
         }
       }
+
       if (length(found_keys) == 0) {
-        stop(sprintf("No periods matching any of %s found in data. Available: %s",
-                     paste("'", keys, "'", collapse=", "),
-                     paste("'", periods, "'", collapse=", ")
+        stop(sprintf(
+          "No periods matching any of %s found in data. Available: %s",
+          paste("'", keys, "'", collapse = ", "),
+          paste("'", periods, "'", collapse = ", ")
         ))
       }
 
-      az |>
-        dplyr::filter(period_without_numbers %in% found_keys) |>
+      # ------------------------------------------------------------------
+      # Filter to the periods we want (dark/light/...) AND optionally keep
+      # only specific indices (e.g., keep dark_1 only, or dark_1+dark_2).
+      # Uses period_with_numbers like "dark_1", "dark_2", ...
+      # ------------------------------------------------------------------
+      out <- az |>
+        dplyr::filter(period_without_numbers %in% found_keys)
+
+      idx_raw <- isolate(input$period_indices_keep)
+      if (!is.null(idx_raw) && nzchar(trimws(idx_raw))) {
+        idx_keep <- trimws(strsplit(idx_raw, ",")[[1]])
+        idx_keep <- idx_keep[nzchar(idx_keep)]
+
+        out <- out |>
+          dplyr::mutate(
+            .period_idx = sub(".*_([0-9]+)$", "\\1", as.character(period_with_numbers))
+          ) |>
+          dplyr::filter(.period_idx %in% idx_keep) |>
+          dplyr::select(-.period_idx)
+      }
+
+      out |>
         dplyr::group_by(period_without_numbers, zone, condition_tagged, plate_id) |>
         dplyr::summarise(
           plate_id = dplyr::first(as.character(plate_id)),
@@ -390,9 +449,9 @@ visualization_module_server <- function(id, rv, config) {
           period_without_numbers = factor(period_without_numbers, levels = found_keys, labels = found_labels)
         ) |>
         dplyr::select(dplyr::any_of(c(
-          "zone","condition_grouped","condition_tagged","condition",
-          "start","plate_id","animal",
-          "period_without_numbers","period_with_numbers","mean_val"
+          "zone", "condition_grouped", "condition_tagged", "condition",
+          "start", "plate_id", "animal",
+          "period_without_numbers", "period_with_numbers", "mean_val"
         )))
     }
 
@@ -688,13 +747,36 @@ visualization_module_server <- function(id, rv, config) {
       tryCatch({
         az <- prepare_all_zone()
         current_cfg <- cfg()
+
         rv$all_zone_combined_light_dark_boxplots <- stats::setNames(
           lapply(EXPECTED_VARS(), function(v) build_periods_df(az, v, current_cfg)),
           EXPECTED_VARS()
         )
         log("✅ Periods datasets created.")
+        if (isolate(input$plot_type) == "boxplot_periods" &&
+            !is.null(isolate(input$response_var)) && nzchar(isolate(input$response_var))) {
+          make_plot(log_it = FALSE)
+        }
       }, error = function(e) log(paste("❌ Periods dataset generation failed:", e$message)))
-    })
+    }, ignoreInit = TRUE)
+
+    shiny::observeEvent(input$period_indices_keep, {
+      shiny::req(!is.null(rv$all_zone_combined_light_dark_boxplots))  # <-- key line
+      tryCatch({
+        az <- prepare_all_zone()
+        current_cfg <- cfg()
+
+        rv$all_zone_combined_light_dark_boxplots <- stats::setNames(
+          lapply(EXPECTED_VARS(), function(v) build_periods_df(az, v, current_cfg)),
+          EXPECTED_VARS()
+        )
+        log("✅ Periods datasets updated (indices filter).")
+        if (isolate(input$plot_type) == "boxplot_periods" &&
+            !is.null(isolate(input$response_var)) && nzchar(isolate(input$response_var))) {
+          make_plot(log_it = FALSE)
+        }
+      }, error = function(e) log(paste("❌ Periods update failed:", e$message)))
+    }, ignoreInit = TRUE)
 
     shiny::observeEvent(input$generate_cumulate_dfs, {
       tryCatch({
@@ -1018,8 +1100,14 @@ visualization_module_server <- function(id, rv, config) {
 
         # --- pooled ---
         per_cols_in <- trimws(strsplit(input$boxplot_periods_colors, ",")[[1]])
-        per_levels  <- unique(sub$period_without_numbers)
-        per_cols    <- ensure_colors(length(per_levels), per_cols_in); names(per_cols) <- per_levels
+        per_levels <- levels(sub$period_without_numbers)
+        if (is.null(per_levels) || !length(per_levels)) {
+          per_levels <- sort(unique(as.character(sub$period_without_numbers)))
+        }
+
+        per_cols_in <- trimws(strsplit(input$boxplot_periods_colors, ",")[[1]])
+        per_cols    <- ensure_colors(length(per_levels), per_cols_in)
+        names(per_cols) <- per_levels
 
         tooltip_pts <- rlang::expr(paste0(
           "Animal: ", animal,
