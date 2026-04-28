@@ -78,7 +78,6 @@ visualization_module_ui <- function(id, config) {
           shiny::tabPanel(
             title = "XLSX", value = "xlsx",
 
-            # (ancienne UI, inchangée)
             shiny::selectInput(ns("plot_type"), "Plot Type",
                                c("boxplot_periods","boxplot_cumulate","boxplot_delta","lineplot"),
                                selected = "boxplot_periods"
@@ -97,7 +96,6 @@ visualization_module_ui <- function(id, config) {
                 c("separated","pooled"), "separated", inline = TRUE
               ),
 
-              # NEW: keep only dark_1 / dark_1+dark_2 etc. (empty = keep all)
               shiny::textInput(
                 ns("period_indices_keep"),
                 "Keep only period indices (e.g. 1 or 1,2). Empty = keep all",
@@ -189,11 +187,75 @@ visualization_module_ui <- function(id, config) {
           ),
 
           # ---------------- TXT ----------------
+          # ---------------- TXT ----------------
           shiny::tabPanel(
             title = "TXT", value = "txt",
-            shiny::helpText("TXT workflow placeholder. You can wire TXT controls here while keeping XLSX unchanged."),
-            shiny::div(style = "margin-top:10px;"),
-            shiny::p("For now, use XLSX tab for full visualization workflow.")
+
+            shiny::selectInput(
+              ns("txt_plot_type"),
+              "TXT Plot Type",
+              choices = c("trajectory_xy"),
+              selected = "trajectory_xy"
+            ),
+
+            shiny::uiOutput(ns("txt_plate_ui")),
+            shiny::uiOutput(ns("txt_conditions_ui")),
+            shiny::div(
+              style = "display:flex; gap:8px; margin-top:6px; margin-bottom:10px;",
+              shiny::actionButton(ns("txt_conds_all"), "All",  style = "width:50%;"),
+              shiny::actionButton(ns("txt_conds_none"), "None", style = "width:50%;")
+            ),
+
+            shiny::uiOutput(ns("txt_well_ui")),
+
+            shiny::radioButtons(
+              ns("txt_time_mode"),
+              "Time selection mode",
+              choices = c("Manual window" = "manual", "Period" = "period"),
+              selected = "manual",
+              inline = TRUE
+            ),
+
+            shiny::conditionalPanel(
+              condition = paste0("input['", ns("txt_time_mode"), "'] == 'manual'"),
+              shiny::fluidRow(
+                shiny::column(
+                  6,
+                  shiny::numericInput(ns("txt_time_start"), "Start time (s)", value = 0, min = 0, step = 1)
+                ),
+                shiny::column(
+                  6,
+                  shiny::numericInput(ns("txt_time_end"), "End time (s)", value = 5, min = 0, step = 1)
+                )
+              )
+            ),
+
+            shiny::conditionalPanel(
+              condition = paste0("input['", ns("txt_time_mode"), "'] == 'period'"),
+              shiny::uiOutput(ns("txt_period_ui"))
+            ),
+
+            shiny::numericInput(
+              ns("txt_target_points"),
+              "Maximum displayed points per well (after averaging)",
+              value = 250, min = 25, max = 5000, step = 25
+            ),
+
+            shiny::checkboxInput(
+              ns("txt_show_points"),
+              "Show averaged points",
+              value = TRUE
+            ),
+
+            shiny::textOutput(ns("txt_selection_info")),
+            shiny::textOutput(ns("txt_window_info")),
+            shiny::textOutput(ns("txt_agg_info")),
+
+            shiny::div(
+              style = "display:flex; flex-direction:column; gap:10px; margin-top:10px;",
+              shiny::actionButton(ns("generate_txt_dfs"), "Generate TXT Dataset"),
+              shiny::actionButton(ns("generate_txt_figure"), "Generate Figure", style = "width:100%;")
+            )
           )
         )
       ),
@@ -210,7 +272,13 @@ visualization_module_ui <- function(id, config) {
           id = ns("output_tabs"),
 
           shiny::tabPanel("Interactive Figure",
-                          ggiraph::girafeOutput(ns("girafe_plot"), width = "100%", height = "650px"),
+                          shinycssloaders::withSpinner(
+                            ggiraph::girafeOutput(ns("girafe_plot"), width = "100%", height = "650px"),
+                            type = 8,
+                            color = "#339989",
+                            size = 1.5,
+                            proxy.height = "650px"
+                          ),
                           shiny::div(style="margin-top:10px;"),
                           shiny::radioButtons(ns("theme_switch"), "Theme", c("Light","Dark"), "Light", inline = TRUE),
                           shiny::div(style="margin-top:10px;"),
@@ -279,7 +347,10 @@ visualization_module_server <- function(id, rv, config) {
     EXPECTED_VARS <- shiny::reactive({ cfg()$expected_vars })
 
     console_messages <- shiny::reactiveVal("👋 Ready.")
-    log <- function(...) console_messages(c(console_messages(), paste(...)))
+    log <- function(...) {
+      old <- shiny::isolate(console_messages())
+      console_messages(c(old, paste(...)))
+    }
 
     # Keep both last ggplot + last girafe widget
     rv$plot_gg     <- NULL
@@ -306,7 +377,7 @@ visualization_module_server <- function(id, rv, config) {
     }
 
     # ---- ggiraph wrapper (fills container + zoom + toolbar) ----
-    to_girafe <- function(p, width_svg = 12, height_svg = 9) {
+    to_girafe <- function(p, width_svg = 25, height_svg = 9) {
       ggiraph::girafe(ggobj = p, width_svg = width_svg, height_svg = height_svg) |>
         ggiraph::girafe_options(
           ggiraph::opts_sizing(rescale = TRUE),
@@ -412,11 +483,6 @@ visualization_module_server <- function(id, rv, config) {
         ))
       }
 
-      # ------------------------------------------------------------------
-      # Filter to the periods we want (dark/light/...) AND optionally keep
-      # only specific indices (e.g., keep dark_1 only, or dark_1+dark_2).
-      # Uses period_with_numbers like "dark_1", "dark_2", ...
-      # ------------------------------------------------------------------
       out <- az |>
         dplyr::filter(period_without_numbers %in% found_keys)
 
@@ -578,6 +644,250 @@ visualization_module_server <- function(id, rv, config) {
       console_messages("👋 Ready.")
     })
 
+    txt_base <- shiny::reactive({
+      tryCatch(
+        prepare_txt_spatial_base(),
+        error = function(e) NULL
+      )
+    })
+
+    txt_selected_wells <- shiny::reactive({
+      df <- txt_base()
+      if (is.null(df) || !nrow(df)) return(character(0))
+
+      resolve_txt_selected_wells(
+        df = df,
+        plate_ids = input$txt_plate_select %||% character(0),
+        selected_conditions = input$txt_condition_select %||% character(0),
+        selected_wells = input$txt_well_select %||% character(0)
+      )
+    })
+
+    txt_auto_bin <- shiny::reactive({
+      df <- txt_base()
+      wells <- txt_selected_wells()
+      if (is.null(df) || !nrow(df) || !length(wells)) return(NULL)
+
+      rng <- tryCatch(
+        resolve_txt_time_range(
+          df = df,
+          well_keys = wells,
+          mode = input$txt_time_mode,
+          time_start = input$txt_time_start,
+          time_end = input$txt_time_end,
+          period_value = input$txt_period_select
+        ),
+        error = function(e) NULL
+      )
+
+      if (is.null(rng)) return(NULL)
+
+      df <- add_txt_keys(df) |>
+        dplyr::filter(
+          well_key %in% wells,
+          T >= rng[1],
+          T <= rng[2]
+        )
+
+      if (!nrow(df)) return(NULL)
+
+      native_dt <- estimate_txt_dt(df)
+      window_len <- max(diff(rng), native_dt)
+
+      target_points <- max(25, suppressWarnings(as.numeric(input$txt_target_points)))
+      if (!is.finite(target_points)) target_points <- 250
+
+      max(native_dt, window_len / target_points)
+    })
+
+    output$txt_plate_ui <- shiny::renderUI({
+      df <- txt_base()
+      if (is.null(df) || !nrow(df)) {
+        return(shiny::helpText("No TXT data available."))
+      }
+
+      plates <- sort(unique(df$plate_id))
+
+      shiny::selectizeInput(
+        ns("txt_plate_select"),
+        "Plate(s)",
+        choices = plates,
+        selected = plates[1],
+        multiple = TRUE,
+        options = list(plugins = list("remove_button"))
+      )
+    })
+
+    output$txt_conditions_ui <- shiny::renderUI({
+      df <- txt_base()
+      if (is.null(df) || !nrow(df)) {
+        return(shiny::helpText("No TXT data available."))
+      }
+
+      conds <- df |>
+        dplyr::filter(!is.na(condition_grouped), condition_grouped != "") |>
+        dplyr::distinct(condition_grouped) |>
+        dplyr::arrange(condition_grouped) |>
+        dplyr::pull(condition_grouped)
+
+      shiny::tagList(
+        shiny::div(style = "margin-top:10px; font-weight:600;", "Visible conditions"),
+        shiny::checkboxGroupInput(
+          ns("txt_condition_select"),
+          NULL,
+          choices = conds,
+          selected = isolate(input$txt_condition_select) %||% conds
+        )
+      )
+    })
+
+    output$txt_well_ui <- shiny::renderUI({
+      df <- txt_base()
+      if (is.null(df) || !nrow(df)) {
+        return(shiny::helpText("No TXT data available."))
+      }
+
+      shiny::req(input$txt_plate_select)
+
+      sub <- add_txt_keys(df) |>
+        dplyr::filter(plate_id %in% input$txt_plate_select)
+
+      if (!is.null(input$txt_condition_select) && length(input$txt_condition_select)) {
+        sub <- sub |>
+          dplyr::filter(condition_grouped %in% input$txt_condition_select)
+      }
+
+      wells <- sub |>
+        dplyr::distinct(plate_id, animal, well_key) |>
+        dplyr::arrange(plate_id, animal) |>
+        dplyr::mutate(label = paste0("Plate ", plate_id, " • ", animal))
+
+      choices <- stats::setNames(wells$well_key, wells$label)
+      current_sel <- isolate(input$txt_well_select) %||% character(0)
+      selected <- intersect(current_sel, wells$well_key)
+
+      shiny::selectizeInput(
+        ns("txt_well_select"),
+        "Well(s) (max 96, empty = use selected conditions)",
+        choices = choices,
+        selected = selected,
+        multiple = TRUE,
+        options = list(
+          maxItems = 96,
+          plugins = list("remove_button")
+        )
+      )
+    })
+
+    output$txt_period_ui <- shiny::renderUI({
+      df <- txt_base()
+      wells <- txt_selected_wells()
+
+      if (is.null(df) || !nrow(df)) {
+        return(shiny::helpText("No TXT data available."))
+      }
+
+      if (!length(wells)) {
+        return(shiny::helpText("Select at least one well or one condition."))
+      }
+
+      df <- add_txt_keys(df) |>
+        dplyr::filter(well_key %in% wells)
+
+      periods <- df |>
+        dplyr::filter(!is.na(period_with_numbers), period_with_numbers != "") |>
+        dplyr::distinct(period_with_numbers) |>
+        dplyr::arrange(period_with_numbers) |>
+        dplyr::pull(period_with_numbers)
+
+      if (!length(periods)) {
+        return(shiny::helpText("No period_with_numbers values available for the current selection."))
+      }
+
+      shiny::selectInput(
+        ns("txt_period_select"),
+        "Period",
+        choices = periods,
+        selected = periods[1]
+      )
+    })
+
+    output$txt_selection_info <- shiny::renderText({
+      wells <- txt_selected_wells()
+      if (!length(wells)) {
+        return("No wells currently selected for display.")
+      }
+      paste0("Resolved wells to display: ", length(wells))
+    })
+
+    output$txt_window_info <- shiny::renderText({
+      df <- txt_base()
+      wells <- txt_selected_wells()
+
+      if (is.null(df) || !nrow(df) || !length(wells)) return("")
+
+      rng <- tryCatch(
+        resolve_txt_time_range(
+          df = df,
+          well_keys = wells,
+          mode = input$txt_time_mode,
+          time_start = input$txt_time_start,
+          time_end = input$txt_time_end,
+          period_value = input$txt_period_select
+        ),
+        error = function(e) NULL
+      )
+
+      if (is.null(rng)) return("")
+
+      paste0(
+        "Resolved time window: ",
+        format(round(rng[1], 2), nsmall = 2),
+        " s → ",
+        format(round(rng[2], 2), nsmall = 2),
+        " s"
+      )
+    })
+
+    output$txt_agg_info <- shiny::renderText({
+      b <- txt_auto_bin()
+      if (is.null(b)) return("")
+
+      paste0(
+        "Automatic temporal averaging bin: ",
+        format(round(b, 3), nsmall = 3),
+        " s"
+      )
+    })
+
+    shiny::observeEvent(input$txt_conds_all, {
+      df <- txt_base()
+      if (is.null(df) || !nrow(df)) return()
+
+      conds <- df |>
+        dplyr::filter(!is.na(condition_grouped), condition_grouped != "") |>
+        dplyr::distinct(condition_grouped) |>
+        dplyr::arrange(condition_grouped) |>
+        dplyr::pull(condition_grouped)
+
+      shiny::updateCheckboxGroupInput(session, "txt_condition_select", selected = conds)
+    })
+
+    shiny::observeEvent(input$txt_conds_none, {
+      shiny::updateCheckboxGroupInput(session, "txt_condition_select", selected = character(0))
+    })
+
+    output$txt_agg_info <- shiny::renderText({
+      b <- txt_auto_bin()
+      if (is.null(b)) return("")
+
+      paste0(
+        "Automatic temporal averaging bin: ",
+        format(round(b, 3), nsmall = 3),
+        " s"
+      )
+    })
+
     output$aggregation_period_label <- shiny::renderUI({
       unit <- if (input$time_unit_convert == "Yes") input$time_unit_target else input$time_unit_original
       shiny::textInput(ns("aggregation_period"), sprintf("Aggregation Period (in %s)", unit), value = "60")
@@ -593,7 +903,6 @@ visualization_module_server <- function(id, rv, config) {
 
     # ---- Condition visibility filter (ggiraph replacement for plotly legend toggle)
     output$conditions_filter_ui <- shiny::renderUI({
-      # pick the most relevant df currently available (use response_var + plot_type)
       v  <- input$response_var
       pt <- input$plot_type
 
@@ -624,7 +933,6 @@ visualization_module_server <- function(id, rv, config) {
     })
 
     shiny::observeEvent(input$conds_all, {
-      # recompute available conditions from current df
       v  <- isolate(input$response_var)
       pt <- isolate(input$plot_type)
       df <- switch(
@@ -724,7 +1032,7 @@ visualization_module_server <- function(id, rv, config) {
         ggiraph::geom_point_interactive(
           ggplot2::aes(
             tooltip = paste0("t=", time_sec, "s\n", condition_grouped, "\nmean=", sprintf("%.3f", mean_val)),
-            data_id = paste0(condition_grouped, "_", time_sec),
+            data_id = paste0(condition_grouped, "_", time_sec)
           ),
           size = 1.8, alpha = 0.8, colour = edge_col
         ) +
@@ -745,23 +1053,31 @@ visualization_module_server <- function(id, rv, config) {
     # ==================================================================
     shiny::observeEvent(input$generate_periods_dfs, {
       tryCatch({
-        az <- prepare_all_zone()
-        current_cfg <- cfg()
+        log("⏳ Generating periods datasets...")
 
-        rv$all_zone_combined_light_dark_boxplots <- stats::setNames(
-          lapply(EXPECTED_VARS(), function(v) build_periods_df(az, v, current_cfg)),
-          EXPECTED_VARS()
-        )
+        shiny::withProgress(message = "Generating periods datasets...", value = 0, {
+          incProgress(0.2)
+
+          az <- prepare_all_zone()
+          current_cfg <- cfg()
+          incProgress(0.6)
+
+          rv$all_zone_combined_light_dark_boxplots <- stats::setNames(
+            lapply(EXPECTED_VARS(), function(v) build_periods_df(az, v, current_cfg)),
+            EXPECTED_VARS()
+          )
+
+          incProgress(1)
+        })
+
         log("✅ Periods datasets created.")
-        if (isolate(input$plot_type) == "boxplot_periods" &&
-            !is.null(isolate(input$response_var)) && nzchar(isolate(input$response_var))) {
-          make_plot(log_it = FALSE)
-        }
-      }, error = function(e) log(paste("❌ Periods dataset generation failed:", e$message)))
+      }, error = function(e) {
+        log(paste("❌ Periods dataset generation failed:", e$message))
+      })
     }, ignoreInit = TRUE)
 
     shiny::observeEvent(input$period_indices_keep, {
-      shiny::req(!is.null(rv$all_zone_combined_light_dark_boxplots))  # <-- key line
+      shiny::req(!is.null(rv$all_zone_combined_light_dark_boxplots))
       tryCatch({
         az <- prepare_all_zone()
         current_cfg <- cfg()
@@ -780,13 +1096,26 @@ visualization_module_server <- function(id, rv, config) {
 
     shiny::observeEvent(input$generate_cumulate_dfs, {
       tryCatch({
-        az <- prepare_all_zone()
-        rv$all_zone_combined_cum_boxplots <- stats::setNames(
-          lapply(EXPECTED_VARS(), function(v) build_cumulate_df(az, v)),
-          EXPECTED_VARS()
-        )
+        log("⏳ Generating cumulative datasets...")
+
+        shiny::withProgress(message = "Generating cumulative datasets...", value = 0, {
+          incProgress(0.3)
+
+          az <- prepare_all_zone()
+          incProgress(0.7)
+
+          rv$all_zone_combined_cum_boxplots <- stats::setNames(
+            lapply(EXPECTED_VARS(), function(v) build_cumulate_df(az, v)),
+            EXPECTED_VARS()
+          )
+
+          incProgress(1)
+        })
+
         log("✅ Cumulative datasets created.")
-      }, error = function(e) log(paste("❌ Cumulative generation failed:", e$message)))
+      }, error = function(e) {
+        log(paste("❌ Cumulative generation failed:", e$message))
+      })
     })
 
     validate_num_pos <- function(x, msg) {
@@ -800,34 +1129,400 @@ visualization_module_server <- function(id, rv, config) {
 
     shiny::observeEvent(input$generate_delta_dfs, {
       tryCatch({
-        shiny::req(validate_num_pos(input$delta_time, "Delta time window must be a positive number."))
-        az <- prepare_all_zone()
-        delta_sec <- as.numeric(input$delta_time)
-        split_list <- build_delta_split(az, EXPECTED_VARS(), input$transition_select, delta_sec)
-        rv$all_zone_combined_delta_boxplots <- split_list
-        log(sprintf("✅ Delta datasets created for transition '%s' (±%ss).", input$transition_select, delta_sec))
-      }, error = function(e) log(paste("❌ Delta generation failed:", e$message)))
+        log("⏳ Generating delta datasets...")
+
+        shiny::withProgress(message = "Generating delta datasets...", value = 0, {
+          shiny::req(validate_num_pos(input$delta_time, "Delta time window must be a positive number."))
+          incProgress(0.2)
+
+          az <- prepare_all_zone()
+          delta_sec <- as.numeric(input$delta_time)
+          incProgress(0.7)
+
+          split_list <- build_delta_split(az, EXPECTED_VARS(), input$transition_select, delta_sec)
+          rv$all_zone_combined_delta_boxplots <- split_list
+
+          incProgress(1)
+        })
+
+        log(sprintf("✅ Delta datasets created for transition '%s' (±%ss).", input$transition_select, as.numeric(input$delta_time)))
+      }, error = function(e) {
+        log(paste("❌ Delta generation failed:", e$message))
+      })
     })
 
     shiny::observeEvent(input$generate_lineplot_dfs, {
       tryCatch({
-        shiny::req(validate_num_pos(input$aggregation_period, "Aggregation period must be a positive number."))
-        az <- prepare_all_zone()
-        rv$all_zone_combined_lineplots <- stats::setNames(
-          lapply(EXPECTED_VARS(), function(v) {
-            build_lineplot_df(
-              az = az, v = v,
-              agg_period = input$aggregation_period,
-              unit_from  = input$time_unit_original,
-              unit_to    = input$time_unit_target,
-              convert    = input$time_unit_convert
-            )
-          }),
-          EXPECTED_VARS()
-        )
+        log("⏳ Generating lineplot datasets...")
+
+        shiny::withProgress(message = "Generating lineplot datasets...", value = 0, {
+          shiny::req(validate_num_pos(input$aggregation_period, "Aggregation period must be a positive number."))
+          incProgress(0.2)
+
+          az <- prepare_all_zone()
+          incProgress(0.6)
+
+          rv$all_zone_combined_lineplots <- stats::setNames(
+            lapply(EXPECTED_VARS(), function(v) {
+              build_lineplot_df(
+                az = az, v = v,
+                agg_period = input$aggregation_period,
+                unit_from  = input$time_unit_original,
+                unit_to    = input$time_unit_target,
+                convert    = input$time_unit_convert
+              )
+            }),
+            EXPECTED_VARS()
+          )
+
+          incProgress(1)
+        })
+
         log("✅ Lineplot datasets created (normalized per well, pooled).")
-      }, error = function(e) log(paste("❌ Lineplot generation failed:", e$message)))
+      }, error = function(e) {
+        log(paste("❌ Lineplot generation failed:", e$message))
+      })
     })
+
+    shiny::observeEvent(input$generate_txt_dfs, {
+      tryCatch({
+        log("⏳ Generating TXT dataset...")
+
+        shiny::withProgress(message = "Generating TXT dataset...", value = 0, {
+          wells <- txt_selected_wells()
+          shiny::req(length(wells) > 0)
+          incProgress(0.2)
+
+          rng <- resolve_txt_time_range(
+            df = txt_base(),
+            well_keys = wells,
+            mode = input$txt_time_mode,
+            time_start = input$txt_time_start,
+            time_end = input$txt_time_end,
+            period_value = input$txt_period_select
+          )
+          incProgress(0.6)
+
+          rv$txt_spatial_current <- build_txt_trajectory_df(
+            df = txt_base(),
+            well_keys = wells,
+            time_range = rng,
+            target_points = input$txt_target_points
+          )
+
+          incProgress(1)
+        })
+
+        log(sprintf(
+          "✅ TXT spatial dataset created (%s rows after aggregation, bin = %.3fs).",
+          nrow(rv$txt_spatial_current),
+          attr(rv$txt_spatial_current, "bin_s")
+        ))
+      }, error = function(e) {
+        log(paste("❌ TXT dataset generation failed:", e$message))
+      })
+    }, ignoreInit = TRUE)
+
+    # ==================================================================
+    # TXT spatial helpers
+    # ==================================================================
+    add_txt_keys <- function(df) {
+      dplyr::mutate(df, well_key = paste(plate_id, animal, sep = "__"))
+    }
+
+    get_txt_source_list <- function() {
+      shiny::req(rv$processing_results)
+      pr <- rv$processing_results
+
+      if ("txt_all" %in% names(pr)) {
+        if (inherits(pr$txt_all, "data.frame") &&
+            nrow(pr$txt_all) > 0 &&
+            all(c("T", "X", "Y", "animal", "plate_id") %in% names(pr$txt_all))) {
+          return(list(pr$txt_all))
+        }
+      }
+
+      if ("txt_by_plate" %in% names(pr)) {
+        obj <- pr$txt_by_plate
+        if (is.list(obj) && length(obj) > 0) {
+          ok <- purrr::map_lgl(obj, function(.x) {
+            inherits(.x, "data.frame") &&
+              nrow(.x) > 0 &&
+              all(c("T", "X", "Y", "animal", "plate_id") %in% names(.x))
+          })
+          if (any(ok)) return(obj[ok])
+        }
+      }
+
+      stop("No TXT processed dataset with columns T, X, Y, animal and plate_id was found in rv$processing_results.")
+    }
+
+    prepare_txt_spatial_base <- function() {
+      lst <- get_txt_source_list()
+
+      dplyr::bind_rows(lst, .id = "txt_source_id") |>
+        dplyr::mutate(
+          T = suppressWarnings(as.numeric(T)),
+          X = suppressWarnings(as.numeric(X)),
+          Y = suppressWarnings(as.numeric(Y)),
+          plate_id = as.character(plate_id),
+          animal = as.character(animal),
+          file_txt_name = as.character(file_txt_name),
+          condition = as.character(condition),
+          condition_grouped = as.character(condition_grouped),
+          condition_tagged = as.character(condition_tagged),
+          period_with_numbers = as.character(period_with_numbers),
+          period_without_numbers = as.character(period_without_numbers),
+          zone = as.character(zone)
+        ) |>
+        dplyr::filter(is.finite(T), is.finite(X), is.finite(Y)) |>
+        dplyr::arrange(plate_id, animal, T)
+    }
+
+    estimate_txt_dt <- function(df) {
+      dt <- df |>
+        dplyr::summarise(dt = stats::median(diff(sort(unique(T))), na.rm = TRUE)) |>
+        dplyr::pull(dt)
+
+      if (!is.finite(dt) || dt <= 0) dt <- 1 / 25
+      dt
+    }
+
+    resolve_txt_selected_wells <- function(df, plate_ids = NULL, selected_conditions = character(0), selected_wells = character(0)) {
+      df <- add_txt_keys(df)
+
+      if (!is.null(plate_ids) && length(plate_ids)) {
+        df <- df |>
+          dplyr::filter(plate_id %in% plate_ids)
+      }
+
+      if (!nrow(df)) return(character(0))
+
+      if (!is.null(selected_conditions) && length(selected_conditions)) {
+        df <- df |>
+          dplyr::filter(condition_grouped %in% selected_conditions)
+      }
+
+      available_wells <- unique(df$well_key)
+
+      if (!is.null(selected_wells) && length(selected_wells)) {
+        return(intersect(selected_wells, available_wells))
+      }
+
+      if (!is.null(selected_conditions) && length(selected_conditions)) {
+        return(available_wells)
+      }
+
+      character(0)
+    }
+
+    resolve_txt_time_range <- function(df, well_keys, mode, time_start = NULL, time_end = NULL, period_value = NULL) {
+      df <- add_txt_keys(df)
+
+      sub <- df |>
+        dplyr::filter(well_key %in% well_keys)
+
+      if (!nrow(sub)) stop("No TXT data for selected wells.")
+
+      if (identical(mode, "manual")) {
+        tmin <- suppressWarnings(as.numeric(time_start))
+        tmax <- suppressWarnings(as.numeric(time_end))
+
+        if (!is.finite(tmin) || !is.finite(tmax) || tmax <= tmin) {
+          stop("Invalid manual time window. End time must be greater than start time.")
+        }
+
+        return(c(tmin, tmax))
+      }
+
+      if (identical(mode, "period")) {
+        if (is.null(period_value) || !nzchar(period_value)) {
+          stop("Please select a period.")
+        }
+
+        subp <- sub |>
+          dplyr::filter(period_with_numbers == period_value)
+
+        if (!nrow(subp)) {
+          stop("No TXT data found for the selected period.")
+        }
+
+        return(range(subp$T, na.rm = TRUE))
+      }
+
+      stop("Unknown TXT time mode.")
+    }
+
+    build_txt_trajectory_df <- function(df, well_keys, time_range, target_points = 100) {
+      shiny::req(length(well_keys) > 0, length(time_range) == 2)
+
+      if (length(unique(well_keys)) > 96) {
+        stop("Please select at most 96 wells for TXT trajectory visualization.")
+      }
+
+      df <- add_txt_keys(df)
+
+      tmin <- min(time_range)
+      tmax <- max(time_range)
+
+      sub <- df |>
+        dplyr::filter(
+          well_key %in% well_keys,
+          T >= tmin,
+          T <= tmax
+        ) |>
+        dplyr::filter(!(X == 0 & Y == 0))
+
+      if (!nrow(sub)) {
+        stop("No TXT data available for the selected wells / time window.")
+      }
+
+      native_dt <- estimate_txt_dt(sub)
+      window_len <- max(tmax - tmin, native_dt)
+
+      target_points <- max(25, suppressWarnings(as.numeric(target_points)))
+      if (!is.finite(target_points)) target_points <- 250
+
+      bin_s <- max(native_dt, window_len / target_points)
+
+      out <- sub |>
+        dplyr::mutate(
+          time_bin = floor((T - tmin) / bin_s),
+          well_id = animal,
+          condition_grouped = dplyr::if_else(
+            is.na(condition_grouped) | condition_grouped == "",
+            "Unknown",
+            condition_grouped
+          )
+        ) |>
+        dplyr::group_by(
+          plate_id,
+          animal, well_key, well_id,
+          condition_grouped, condition_tagged, zone,
+          time_bin
+        ) |>
+        dplyr::summarise(
+          T = mean(T, na.rm = TRUE),
+          X = mean(X, na.rm = TRUE),
+          Y = mean(Y, na.rm = TRUE),
+          n_raw = dplyr::n(),
+          .groups = "drop"
+        ) |>
+        dplyr::filter(
+          is.finite(X), is.finite(Y),
+          !(X == 0 & Y == 0)
+        ) |>
+        dplyr::arrange(condition_grouped, plate_id, animal, T) |>
+        dplyr::group_by(plate_id, animal) |>
+        dplyr::mutate(
+          point_id = paste0("traj_", plate_id, "_", animal, "_", dplyr::row_number()),
+          path_id  = paste0("path_", plate_id, "_", animal),
+          tooltip  = paste0(
+            "Plate: ", plate_id,
+            "<br>Well: ", animal,
+            "<br>Condition: ", condition_grouped,
+            "<br>t = ", sprintf("%.2f", T), " s",
+            "<br>X = ", sprintf("%.1f", X),
+            "<br>Y = ", sprintf("%.1f", Y),
+            "<br>Mean of ", n_raw, " raw points"
+          )
+        ) |>
+        dplyr::ungroup()
+
+      attr(out, "bin_s") <- bin_s
+      attr(out, "native_dt") <- native_dt
+      attr(out, "time_range") <- c(tmin, tmax)
+
+      out
+    }
+
+    generate_txt_plot <- function(df, theme_choice, show_points = TRUE) {
+      theme_is_light <- tolower(theme_choice) == "light"
+      theme_obj <- if (theme_is_light) light_theme() else dark_theme()
+      edge_col  <- if (theme_is_light) "black" else "white"
+
+      cond_levels <- sort(unique(as.character(df$condition_grouped)))
+      cols <- ensure_colors(length(cond_levels))
+      names(cols) <- cond_levels
+
+      start_df <- df |>
+        dplyr::group_by(plate_id, animal) |>
+        dplyr::slice_min(T, n = 1, with_ties = FALSE) |>
+        dplyr::ungroup()
+
+      end_df <- df |>
+        dplyr::group_by(plate_id, animal) |>
+        dplyr::slice_max(T, n = 1, with_ties = FALSE) |>
+        dplyr::ungroup()
+
+      p <- ggplot2::ggplot(
+        df,
+        ggplot2::aes(
+          x = X, y = Y,
+          group = interaction(plate_id, animal),
+          colour = condition_grouped
+        )
+      ) +
+        ggiraph::geom_path_interactive(
+          ggplot2::aes(
+            data_id = path_id,
+            tooltip = tooltip
+          ),
+          linewidth = 0.7,
+          alpha = 0.85,
+          hover_css = "stroke-width:2.2px!important;opacity:1!important;"
+        )
+
+      if (isTRUE(show_points)) {
+        p <- p +
+          ggiraph::geom_point_interactive(
+            ggplot2::aes(
+              tooltip = tooltip,
+              data_id = point_id
+            ),
+            size = 1.3,
+            alpha = 0.65,
+            hover_css = "r:4!important;opacity:1!important;"
+          )
+      }
+
+      p +
+        ggplot2::geom_point(
+          data = start_df,
+          ggplot2::aes(x = X, y = Y),
+          inherit.aes = FALSE,
+          shape = 21,
+          fill = "white",
+          colour = edge_col,
+          stroke = 0.9,
+          size = 2.5
+        ) +
+        ggplot2::geom_point(
+          data = end_df,
+          ggplot2::aes(x = X, y = Y),
+          inherit.aes = FALSE,
+          shape = 4,
+          colour = edge_col,
+          stroke = 1.1,
+          size = 2.8
+        ) +
+        ggplot2::scale_colour_manual(values = cols, limits = cond_levels, name = "Condition") +
+        ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0.02, 0.02))) +
+        ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.03, 0.03))) +
+        ggplot2::coord_equal() +
+        ggplot2::facet_wrap(~condition_grouped, ncol = 1, scales = "free_y") +
+        ggplot2::labs(
+          x = "X",
+          y = "Y",
+          caption = "Open circle = start of the selected window; cross = end."
+        ) +
+        theme_obj +
+        ggplot2::theme(
+          plot.caption.position = "plot",
+          plot.caption = ggplot2::element_text(hjust = 1),
+          legend.position = "none"
+        )
+    }
 
     # ==================================================================
     # Plot factory
@@ -852,8 +1547,6 @@ visualization_module_server <- function(id, rv, config) {
       list(order = ord, colors = cols)
     }
 
-    # ---- Sina helper: exact sina render + reliable ggiraph hover ----
-    # Hover behavior: only "grow" the point (no color change)
     add_sina_with_tooltip <- function(
     p, data, aes_x, aes_y, tooltip_expr,
     size = 1.6, alpha = 0.55,
@@ -882,10 +1575,6 @@ visualization_module_server <- function(id, rv, config) {
         )
     }
 
-
-    # ---- Boxplot hover: tooltip only (Mean + Median), no visible highlight ----
-    # Separated: compute stats directly (supports facet + free_x)
-    # Pooled: use ggplot_build() to get EXACT xmin/xmax positions (fixes "inverted" hover)
     add_boxplot_hover <- function(
     p, data, x_col, y_col,
     facet_col = NULL,
@@ -899,9 +1588,6 @@ visualization_module_server <- function(id, rv, config) {
       d <- data[!is.na(data[[x_col]]) & !is.na(data[[y_col]]), , drop = FALSE]
       if (!nrow(d)) return(p)
 
-      # =========================
-      # POOLED (dodge): exact geometry from ggplot_build()
-      # =========================
       if (!is.null(dodge_col)) {
         gb <- ggplot2::ggplot_build(p)
         li <- which(vapply(p$layers, function(l) inherits(l$geom, "GeomBoxplot"), logical(1)))[1]
@@ -912,13 +1598,11 @@ visualization_module_server <- function(id, rv, config) {
         if (is.null(x_order)) x_order <- levels(d[[x_col]])
         if (is.null(dodge_levels)) dodge_levels <- unique(as.character(d[[dodge_col]]))
 
-        # Map built boxes -> (condition, dodge level) using x positions
         ld$x_base <- round(ld$x)
         ld$cond   <- x_order[pmax(1, pmin(length(x_order), ld$x_base))]
         ld$dodge_idx <- ave(ld$x, ld$x_base, FUN = function(z) rank(z, ties.method = "first"))
         ld$dodge  <- dodge_levels[pmax(1, pmin(length(dodge_levels), ld$dodge_idx))]
 
-        # Mean per (condition, dodge)
         mean_df <- dplyr::summarise(
           dplyr::group_by(d, .data[[x_col]], .data[[dodge_col]]),
           mean = mean(.data[[y_col]], na.rm = TRUE),
@@ -952,9 +1636,6 @@ visualization_module_server <- function(id, rv, config) {
         )
       }
 
-      # =========================
-      # SEPARATED / CUMULATE: compute stats (supports facet with free_x)
-      # =========================
       grp <- c(facet_col, x_col)
       grp <- grp[!is.null(grp) & nzchar(grp)]
 
@@ -969,7 +1650,6 @@ visualization_module_server <- function(id, rv, config) {
       stat_df$upper  <- vapply(stat_df$.stats, `[`, numeric(1), 4)
       stat_df$.stats <- NULL
 
-      # x index (per facet if needed)
       if (!is.null(facet_col)) {
         stat_df <- dplyr::group_modify(
           dplyr::group_by(stat_df, .data[[facet_col]]),
@@ -1006,14 +1686,11 @@ visualization_module_server <- function(id, rv, config) {
     # ==================================================================
     # Generate Plot function
     # ==================================================================
-
     generate_plot <- function(df, response_var, plot_type, boxplot_mode,
                               selected_zone, theme_choice, condition_order, condition_colors) {
 
-      # --- Data subset ---
       sub <- droplevels(subset(df, zone == selected_zone))
 
-      # Apply "visible conditions" filter (NULL/empty = none selected)
       vis <- input$visible_conditions %||% character(0)
       if (!length(vis)) {
         return(ggplot2::ggplot() +
@@ -1031,11 +1708,9 @@ visualization_module_server <- function(id, rv, config) {
       theme_obj <- if (theme_is_light) light_theme() else dark_theme()
       edge_col  <- if (theme_is_light) "black" else "white"
 
-      # --- Hover styles (keep it simple) ---
       hover_css_pts <- "r:6!important;opacity:1!important;fill-opacity:1!important;stroke-opacity:1!important;"
       hover_css_box <- "fill:transparent!important;stroke:transparent!important;opacity:1!important;"
 
-      # --- Factor order & colors ---
       gvar <- "condition_grouped"
       present_levels <- unique(sub[[gvar]])
       ord <- intersect(condition_order, present_levels); if (!length(ord)) ord <- present_levels
@@ -1047,19 +1722,15 @@ visualization_module_server <- function(id, rv, config) {
         cols_named <- ensure_colors(length(ord), cols_named); names(cols_named) <- ord
       }
 
-      # --- Visual params ---
       pt_size <- 2.3; pt_alpha <- 0.65; jit_w <- 0.18; box_lwd <- 0.55; sina_maxw <- 0.25
-      box_w <- 0.60                              # box width (a bit slimmer)
-      x_pad <- 0.60                              # space between condition groups
+      box_w <- 0.60
+      x_pad <- 0.60
       dodge_w    <- 0.65
       dodge_pos  <- ggplot2::position_dodge(width = dodge_w)
       point_pos  <- ggplot2::position_jitterdodge(dodge.width = dodge_w, jitter.width = jit_w)
 
       sub$.row_id <- paste0("r", seq_len(nrow(sub)))
 
-      # =========================================================
-      # BOX PLOT — PERIODS
-      # =========================================================
       if (plot_type == "boxplot_periods") {
 
         if (identical(boxplot_mode, "separated")) {
@@ -1098,7 +1769,6 @@ visualization_module_server <- function(id, rv, config) {
           )
         }
 
-        # --- pooled ---
         per_cols_in <- trimws(strsplit(input$boxplot_periods_colors, ",")[[1]])
         per_levels <- levels(sub$period_without_numbers)
         if (is.null(per_levels) || !length(per_levels)) {
@@ -1123,7 +1793,6 @@ visualization_module_server <- function(id, rv, config) {
             colour = edge_col, linewidth = box_lwd, width = box_w, position = dodge_pos
           )
 
-        # Box tooltip only (Mean/Median), aligned via ggplot_build()
         gg <- add_boxplot_hover(gg, sub, x_col = gvar, y_col = "mean_val",
                                 dodge_col = "period_without_numbers", x_order = ord,
                                 dodge_levels = per_levels, hover_css = hover_css_box)
@@ -1151,9 +1820,6 @@ visualization_module_server <- function(id, rv, config) {
         )
       }
 
-      # =========================================================
-      # BOX PLOT — CUMULATE
-      # =========================================================
       if (plot_type == "boxplot_cumulate") {
 
         n_animals <- sub |>
@@ -1199,9 +1865,6 @@ visualization_module_server <- function(id, rv, config) {
         )
       }
 
-      # =========================================================
-      # BOX PLOT — DELTA
-      # =========================================================
       if (plot_type == "boxplot_delta") {
 
         tr <- input$transition_select
@@ -1250,7 +1913,6 @@ visualization_module_server <- function(id, rv, config) {
           )
         }
 
-        # --- pooled ---
         phase_cols_in <- trimws(strsplit(input$boxplot_delta_phase_colors, ",")[[1]])
         phase_cols <- ensure_colors(length(present_phase), phase_cols_in); names(phase_cols) <- present_phase
 
@@ -1294,9 +1956,6 @@ visualization_module_server <- function(id, rv, config) {
         )
       }
 
-      # =========================================================
-      # LINE PLOT
-      # =========================================================
       if (plot_type == "lineplot") {
 
         gg <- ggplot2::ggplot(sub,
@@ -1350,8 +2009,6 @@ visualization_module_server <- function(id, rv, config) {
 
     # ==================================================================
     # Reproduction script generator (simple, separated-only)
-    # - Note: app-specific hover helpers (add_boxplot_hover / add_sina_with_tooltip)
-    #   are not reproduced here; the script generates a faithful static ggplot.
     # ==================================================================
     generate_r_script <- function(df, response_var, plot_type, boxplot_mode,
                                   selected_zone, theme_choice, condition_order, condition_colors,
@@ -1359,137 +2016,294 @@ visualization_module_server <- function(id, rv, config) {
 
       `%||%` <- function(a, b) if (is.null(a)) b else a
 
-      # ---- minimal inputs we keep ----
-      vis <- extra_params$visible_conditions %||% character(0)
-      tr  <- extra_params$transition %||% ""
+      if (!plot_type %in% c("boxplot_periods", "boxplot_cumulate", "boxplot_delta", "lineplot")) {
+        stop("generate_r_script() only supports XLSX plot types.")
+      }
 
-      theme_is_light <- tolower(theme_choice) == "light"
-      edge_col <- if (theme_is_light) "black" else "white"
+      visible_conditions <- extra_params$visible_conditions %||% character(0)
+      transition         <- extra_params$transition %||% ""
+      lineplot_error_mode <- extra_params$error_mode %||% "error_bar"
+      time_unit_label     <- extra_params$time_unit %||% "seconds"
 
-      dataset_type <- switch(plot_type,
-                             "boxplot_periods"  = "Boxplot Periods",
-                             "boxplot_cumulate" = "Boxplot Cumulative",
-                             "boxplot_delta"    = "Boxplot Delta",
-                             "lineplot"         = "Lineplot",
-                             "Unknown")
+      dataset_type <- switch(
+        plot_type,
+        "boxplot_periods"  = "periods",
+        "boxplot_cumulate" = "cumulative",
+        "boxplot_delta"    = "delta",
+        "lineplot"         = "lineplot"
+      )
+
       xlsx_name <- paste0(dataset_type, "_dataset_", response_var, ".xlsx")
 
-      script <- c(
+      visible_cond_txt <- if (length(visible_conditions)) {
+        paste(sprintf("'%s'", visible_conditions), collapse = ", ")
+      } else {
+        ""
+      }
+
+      script_header <- c(
         "# ======================================================================",
-        "# REPRODUCTION SCRIPT - Generated by Shiny App (simple / separated-only)",
+        "# REPRODUCTION SCRIPT - Generated by Shiny App",
         paste("# Date:", format(Sys.time(), "%Y-%m-%d %H:%M:%S")),
         paste("# Plot Type:", plot_type),
+        paste("# Boxplot Mode:", boxplot_mode %||% "NA"),
         paste("# Response Variable:", response_var),
         paste("# Zone:", selected_zone),
-        paste("# Theme:", theme_choice),
-        "# ======================================================================\n",
+        paste("# Theme in app:", theme_choice),
+        "# ======================================================================",
+        "",
         "library(ggplot2)",
         "library(dplyr)",
-        "library(readxl)\n",
-
-        "# ---- Load dataset exported by the app ----",
+        "library(readxl)",
+        "",
         paste0("df <- readxl::read_excel('", xlsx_name, "')"),
         paste0("sub <- subset(df, zone == ", selected_zone, ")"),
-        "sub <- droplevels(sub)\n",
-
-        "# ---- Filter visible conditions (same behavior as app) ----",
-        paste0("visible_conditions <- c(", paste(sprintf("'%s'", vis), collapse = ", "), ")"),
-        "if (!length(visible_conditions)) stop('No condition selected')",
-        "sub <- sub[sub$condition_grouped %in% visible_conditions, , drop = FALSE]",
-        "if (!nrow(sub)) stop('No data after filtering')\n",
-
-        "# ---- Order conditions (optional) ----",
-        paste0("ord_in <- c(", paste(sprintf("'%s'", condition_order), collapse = ", "), ")"),
-        "ord <- intersect(ord_in, unique(sub$condition_grouped))",
-        "if (!length(ord)) ord <- unique(sub$condition_grouped)",
-        "sub$condition_grouped <- factor(sub$condition_grouped, levels = ord)\n",
-
-        "# ---- Theme (keeps the app look, simplified) ----",
-        "theme_clean <- function(edge_col='black', light=TRUE){",
-        "  ggplot2::theme_bw(base_size = 11) %+replace% ggplot2::theme(",
-        "    plot.title   = ggplot2::element_text(color = edge_col, size = 14, hjust = .5),",
-        "    axis.text    = ggplot2::element_text(color = edge_col, size = 12),",
-        "    axis.title.x = ggplot2::element_text(color = edge_col, size = 12, margin = ggplot2::margin(t = 5, r = 15)),",
-        "    axis.title.y = ggplot2::element_text(color = edge_col, size = 12, angle = 90, margin = ggplot2::margin(r = 10)),",
-        "    legend.position = 'right',",
-        "    legend.text  = ggplot2::element_text(color = edge_col, size = 12, face = 'italic'),",
-        "    legend.title = ggplot2::element_blank(),",
-        "    strip.text.x = ggplot2::element_text(size = 12, color = edge_col),",
-        "    strip.background = ggplot2::element_rect(fill = if (light) 'white' else 'black', colour = edge_col),",
-        "    panel.background = ggplot2::element_rect(fill = if (light) 'white' else 'black', colour = edge_col),",
-        "    panel.border = ggplot2::element_rect(color = edge_col, fill = NA),",
-        "    plot.caption = ggplot2::element_text(color = edge_col, size = 8, hjust = 1, margin = ggplot2::margin(t = 10))",
-        "  )",
-        "}",
-        paste0("theme_obj <- theme_clean(edge_col = '", edge_col, "', light = ", if (theme_is_light) "TRUE" else "FALSE", ")\n"),
-
-        "# ======================================================================",
-        "# Plot (simple separated-only)",
-        "# ======================================================================",
-        "gg <- NULL\n"
+        "sub <- droplevels(sub)",
+        ""
       )
 
-      # ---- plot branches (separated-only) ----
-      branch <- switch(
+      if (length(visible_conditions)) {
+        script_header <- c(
+          script_header,
+          paste0("visible_conditions <- c(", visible_cond_txt, ")"),
+          "sub <- sub[sub$condition_grouped %in% visible_conditions, , drop = FALSE]",
+          ""
+        )
+      }
+
+      script_body <- switch(
+
         plot_type,
 
-        "boxplot_periods" = c(
-          "gg <- ggplot2::ggplot(sub, ggplot2::aes(x = condition_grouped, y = mean_val, fill = condition_grouped)) +",
-          "  ggplot2::geom_boxplot(colour = " %+% sprintf("'%s'", edge_col) %+% ", linewidth = 0.55) +",
-          "  ggplot2::geom_point(size = 2.0, alpha = 0.7, colour = " %+% sprintf("'%s'", edge_col) %+% ", position = ggplot2::position_jitter(width = 0.15)) +",
-          "  ggplot2::facet_wrap(~period_without_numbers, scales = 'free_x') +",
-          paste0("  ggplot2::labs(y = '", response_var, " (Zone ", selected_zone, ")', caption = 'Each point corresponds to the mean value for one animal.') +"),
-          "  theme_obj + ggplot2::theme(legend.position = 'none', axis.text.x = ggplot2::element_text(angle = 45, hjust = 1), axis.title.x = ggplot2::element_blank())"
-        ),
+        "boxplot_periods" = {
+          if (identical(boxplot_mode, "separated")) {
+            c(
+              "ggplot(sub, aes(x = condition_grouped, y = mean_val)) +",
+              "  geom_boxplot(aes(fill = condition_grouped)) +",
+              "  geom_point(position = position_jitter(width = 0.15), alpha = 0.7) +",
+              "  facet_wrap(~period_without_numbers, scales = 'free_x') +",
+              paste0("  labs(y = '", response_var, " (Zone ", selected_zone, ")') +"),
+              "  theme_bw() +",
+              "  theme(axis.text.x = element_text(angle = 45, hjust = 1),",
+              "        axis.title.x = element_blank(),",
+              "        legend.position = 'none')"
+            )
+          } else {
+            c(
+              "ggplot(sub, aes(x = condition_grouped, y = mean_val, fill = period_without_numbers)) +",
+              "  geom_boxplot(position = position_dodge(width = 0.75)) +",
+              "  geom_point(",
+              "    aes(group = interaction(condition_grouped, period_without_numbers)),",
+              "    position = position_jitterdodge(dodge.width = 0.75, jitter.width = 0.15),",
+              "    alpha = 0.7",
+              "  ) +",
+              paste0("  labs(y = '", response_var, " (Zone ", selected_zone, ")', fill = 'Period') +"),
+              "  theme_bw() +",
+              "  theme(axis.text.x = element_text(angle = 45, hjust = 1),",
+              "        axis.title.x = element_blank())"
+            )
+          }
+        },
 
         "boxplot_cumulate" = c(
-          "gg <- ggplot2::ggplot(sub, ggplot2::aes(x = condition_grouped, y = cum, fill = condition_grouped)) +",
-          "  ggplot2::geom_boxplot(colour = " %+% sprintf("'%s'", edge_col) %+% ", linewidth = 0.55) +",
-          "  ggplot2::geom_point(size = 2.0, alpha = 0.7, colour = " %+% sprintf("'%s'", edge_col) %+% ", position = ggplot2::position_jitter(width = 0.15)) +",
-          paste0("  ggplot2::labs(y = 'Cumulative ", response_var, " (Zone ", selected_zone, ")', caption = 'Each point corresponds to the cumulative value for one animal.') +"),
-          "  theme_obj + ggplot2::theme(legend.position = 'none', axis.text.x = ggplot2::element_text(angle = 45, hjust = 1), axis.title.x = ggplot2::element_blank())"
+          "ggplot(sub, aes(x = condition_grouped, y = cum)) +",
+          "  geom_boxplot(aes(fill = condition_grouped)) +",
+          "  geom_point(position = position_jitter(width = 0.15), alpha = 0.7) +",
+          paste0("  labs(y = 'Cumulative ", response_var, " (Zone ", selected_zone, ")') +"),
+          "  theme_bw() +",
+          "  theme(axis.text.x = element_text(angle = 45, hjust = 1),",
+          "        axis.title.x = element_blank(),",
+          "        legend.position = 'none')"
         ),
 
-        "boxplot_delta" = c(
-          paste0("tr <- '", tr, "'"),
-          "if (!nzchar(tr)) stop('Missing transition for delta plot')",
-          "sub <- dplyr::filter(sub, grepl(paste0('^', tr, '_'), transition_phase))",
-          "sub$phase <- gsub(paste0('^', tr, '_'), '', sub$transition_phase)",
-          "sub$phase <- dplyr::recode(sub$phase, before='Before', switch='Switch', after='After', .default=NA_character_)",
-          "sub <- dplyr::filter(sub, !is.na(phase))",
-          "sub$phase <- factor(sub$phase, levels = c('Before','Switch','After'))",
-          "if (!nrow(sub)) stop('No delta data for selected transition')\n",
-          "gg <- ggplot2::ggplot(sub, ggplot2::aes(x = condition_grouped, y = mean_val, fill = condition_grouped)) +",
-          "  ggplot2::geom_boxplot(colour = " %+% sprintf("'%s'", edge_col) %+% ", linewidth = 0.55) +",
-          "  ggplot2::geom_point(size = 2.0, alpha = 0.7, colour = " %+% sprintf("'%s'", edge_col) %+% ", position = ggplot2::position_jitter(width = 0.15)) +",
-          "  ggplot2::facet_wrap(~phase, scales = 'free_x') +",
-          paste0("  ggplot2::labs(y = '", response_var, " (Zone ", selected_zone, ")', caption = 'Each point is the mean per animal in the Before / Switch / After windows.') +"),
-          "  theme_obj + ggplot2::theme(legend.position = 'none', axis.text.x = ggplot2::element_text(angle = 45, hjust = 1), axis.title.x = ggplot2::element_blank())"
-        ),
+        "boxplot_delta" = {
+          if (!nzchar(transition)) {
+            c("stop('Missing transition for delta plot export.')")
+          } else if (identical(boxplot_mode, "separated")) {
+            c(
+              paste0("sub <- sub[grepl('^", transition, "_', sub$transition_phase), , drop = FALSE]"),
+              "sub$phase <- gsub('.*_', '', sub$transition_phase)",
+              "sub$phase <- dplyr::recode(sub$phase,",
+              "  before = 'Before',",
+              "  switch = 'Switch',",
+              "  after  = 'After'",
+              ")",
+              "",
+              "ggplot(sub, aes(x = condition_grouped, y = mean_val)) +",
+              "  geom_boxplot(aes(fill = condition_grouped)) +",
+              "  geom_point(position = position_jitter(width = 0.15), alpha = 0.7) +",
+              "  facet_wrap(~phase, scales = 'free_x') +",
+              paste0("  labs(y = '", response_var, " (Zone ", selected_zone, ")') +"),
+              "  theme_bw() +",
+              "  theme(axis.text.x = element_text(angle = 45, hjust = 1),",
+              "        axis.title.x = element_blank(),",
+              "        legend.position = 'none')"
+            )
+          } else {
+            c(
+              paste0("sub <- sub[grepl('^", transition, "_', sub$transition_phase), , drop = FALSE]"),
+              "sub$phase <- gsub('.*_', '', sub$transition_phase)",
+              "sub$phase <- dplyr::recode(sub$phase,",
+              "  before = 'Before',",
+              "  switch = 'Switch',",
+              "  after  = 'After'",
+              ")",
+              "",
+              "ggplot(sub, aes(x = condition_grouped, y = mean_val, fill = phase)) +",
+              "  geom_boxplot(position = position_dodge(width = 0.75)) +",
+              "  geom_point(",
+              "    aes(group = interaction(condition_grouped, phase)),",
+              "    position = position_jitterdodge(dodge.width = 0.75, jitter.width = 0.15),",
+              "    alpha = 0.7",
+              "  ) +",
+              paste0("  labs(y = '", response_var, " (Zone ", selected_zone, ")', fill = 'Phase') +"),
+              "  theme_bw() +",
+              "  theme(axis.text.x = element_text(angle = 45, hjust = 1),",
+              "        axis.title.x = element_blank())"
+            )
+          }
+        },
 
-        "lineplot" = c(
-          "gg <- ggplot2::ggplot(sub, ggplot2::aes(x = start_rounded, y = val_per_well, colour = condition_grouped, group = condition_grouped)) +",
-          "  ggplot2::geom_line(linewidth = 0.8) +",
-          "  ggplot2::geom_point(size = 2.0, alpha = 0.8) +",
-          paste0("  ggplot2::labs(x = 'Time', y = '", response_var, " (Zone ", selected_zone, ")', caption = 'Each line is the normalized response per condition over time.') +"),
-          "  theme_obj + ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))"
-        ),
-
-        c("stop('Unknown plot_type')")
+        "lineplot" = {
+          if (identical(lineplot_error_mode, "ci95")) {
+            c(
+              "ggplot(sub, aes(x = start_rounded, y = val_per_well, colour = condition_grouped, group = condition_grouped)) +",
+              "  geom_ribbon(",
+              "    aes(ymin = val_per_well - 1.96 * se_per_well,",
+              "        ymax = val_per_well + 1.96 * se_per_well,",
+              "        fill = condition_grouped),",
+              "    alpha = 0.2, colour = NA",
+              "  ) +",
+              "  geom_line() +",
+              "  geom_point() +",
+              paste0("  labs(x = 'Time (", time_unit_label, ")', y = '", response_var, " (Zone ", selected_zone, ")') +"),
+              "  theme_bw() +",
+              "  theme(axis.text.x = element_text(angle = 45, hjust = 1))"
+            )
+          } else {
+            c(
+              "ggplot(sub, aes(x = start_rounded, y = val_per_well, colour = condition_grouped, group = condition_grouped)) +",
+              "  geom_errorbar(aes(ymin = val_per_well - se_per_well, ymax = val_per_well + se_per_well), width = 0.15) +",
+              "  geom_line() +",
+              "  geom_point() +",
+              paste0("  labs(x = 'Time (", time_unit_label, ")', y = '", response_var, " (Zone ", selected_zone, ")') +"),
+              "  theme_bw() +",
+              "  theme(axis.text.x = element_text(angle = 45, hjust = 1))"
+            )
+          }
+        }
       )
 
-      script <- c(script, branch, "\nprint(gg)\n")
-      paste(script, collapse = "\n")
+      paste(c(script_header, script_body), collapse = "\n")
     }
-
-
 
     # ==================================================================
     # Render (single mode: girafe only)
     # ==================================================================
     output$girafe_plot <- ggiraph::renderGirafe({
-      shiny::req(rv$plot_girafe)
-      rv$plot_girafe
+      tryCatch({
+
+        input$generate_figure
+        input$response_var
+
+        if (identical(input$data_source_tabs, "xlsx")) {
+
+          if (is.null(input$response_var) || !nzchar(input$response_var)) {
+            p0 <- ggplot2::ggplot() +
+              ggplot2::annotate("text", x = 0, y = 0, label = "Select a response variable") +
+              ggplot2::theme_void()
+            return(to_girafe(p0, width_svg = 12, height_svg = 9))
+          }
+
+          df <- switch(
+            input$plot_type,
+            "boxplot_periods"  = rv$all_zone_combined_light_dark_boxplots[[input$response_var]],
+            "boxplot_cumulate" = rv$all_zone_combined_cum_boxplots[[input$response_var]],
+            "boxplot_delta"    = rv$all_zone_combined_delta_boxplots[[input$response_var]],
+            "lineplot"         = rv$all_zone_combined_lineplots[[input$response_var]]
+          )
+
+          if (is.null(df) || !nrow(df)) {
+            p0 <- ggplot2::ggplot() +
+              ggplot2::annotate("text", x = 0, y = 0, label = "Generate datasets first") +
+              ggplot2::theme_void()
+            return(to_girafe(p0, width_svg = 12, height_svg = 9))
+          }
+
+          log("⏳ Generating figure...")
+          on.exit(log("🖼 Figure generated."), add = TRUE)
+
+          selected_zone <- input$selected_zone
+          if (is.null(selected_zone) || !length(selected_zone) || !selected_zone %in% unique(df$zone)) {
+            zones <- sort(unique(df$zone))
+            if (!length(zones)) {
+              p0 <- ggplot2::ggplot() +
+                ggplot2::annotate("text", x = 0, y = 0, label = "No zones available") +
+                ggplot2::theme_void()
+              return(to_girafe(p0, width_svg = 12, height_svg = 9))
+            }
+            selected_zone <- as.character(zones[1])
+          }
+
+          oc <- order_and_colors(df)
+
+          boxplot_mode <- switch(
+            input$plot_type,
+            "boxplot_periods"  = input$boxplot_periods_mode,
+            "boxplot_cumulate" = "separated",
+            "boxplot_delta"    = input$boxplot_delta_mode,
+            NULL
+          )
+
+          p <- generate_plot(
+            df = df,
+            response_var = input$response_var,
+            plot_type = input$plot_type,
+            boxplot_mode = boxplot_mode,
+            selected_zone = selected_zone,
+            theme_choice = input$theme_switch,
+            condition_order = oc$order,
+            condition_colors = oc$colors
+          )
+
+          rv$plot_gg <- p
+          return(to_girafe(p, width_svg = 12, height_svg = 9))
+        }
+
+        if (identical(input$data_source_tabs, "txt")) {
+
+          if (is.null(rv$txt_spatial_current) || !nrow(rv$txt_spatial_current)) {
+            p0 <- ggplot2::ggplot() +
+              ggplot2::annotate("text", x = 0, y = 0, label = "Generate a TXT dataset first") +
+              ggplot2::theme_void()
+            return(to_girafe(p0, width_svg = 12, height_svg = 9))
+          }
+
+          log("⏳ Generating TXT figure...")
+          on.exit(log("🖼 TXT figure generated."), add = TRUE)
+
+          p <- generate_txt_plot(
+            df = rv$txt_spatial_current,
+            theme_choice = input$theme_switch,
+            show_points = isTRUE(input$txt_show_points)
+          )
+
+          rv$plot_gg <- p
+          return(to_girafe(p, width_svg = 12, height_svg = 9))
+        }
+
+        p0 <- ggplot2::ggplot() + ggplot2::theme_void()
+        to_girafe(p0, width_svg = 12, height_svg = 9)
+
+      }, error = function(e) {
+        log(paste("❌ Figure generation failed:", e$message))
+
+        p_err <- ggplot2::ggplot() +
+          ggplot2::annotate("text", x = 0, y = 0, label = "Figure generation failed") +
+          ggplot2::theme_void()
+
+        to_girafe(p_err, width_svg = 12, height_svg = 9)
+      })
     })
 
     output$console_output <- shiny::renderPrint({
@@ -1506,66 +2320,74 @@ visualization_module_server <- function(id, rv, config) {
     }
 
     make_plot <- function(log_it = FALSE) {
-      df <- switch(
-        input$plot_type,
-        "boxplot_periods"  = rv$all_zone_combined_light_dark_boxplots[[input$response_var]],
-        "boxplot_cumulate" = rv$all_zone_combined_cum_boxplots[[input$response_var]],
-        "boxplot_delta"    = rv$all_zone_combined_delta_boxplots[[input$response_var]],
-        "lineplot"         = rv$all_zone_combined_lineplots[[input$response_var]]
-      )
-
-      if (is.null(df) || is.null(input$response_var) || input$response_var == "") {
-        if (log_it) log("⚠️ Select a response variable and generate datasets first.")
+      if (!identical(input$data_source_tabs, "txt")) {
         return(invisible(NULL))
       }
 
-      selected_zone <- input$selected_zone
-      if (is.null(selected_zone) || !length(selected_zone)) {
-        zones <- sort(unique(df$zone))
-        if (!length(zones)) { if (log_it) log("⚠️ No zones available in current dataset."); return(invisible(NULL)) }
-        selected_zone <- as.character(zones[1])
-      }
+      tryCatch({
+        wells <- txt_selected_wells()
+        shiny::req(length(wells) > 0)
 
-      oc <- order_and_colors(df)
-      boxplot_mode <- switch(input$plot_type,
-                             "boxplot_periods"  = input$boxplot_periods_mode,
-                             "boxplot_cumulate" = "separated",
-                             "boxplot_delta"    = input$boxplot_delta_mode,
-                             NULL
-      )
+        rng <- resolve_txt_time_range(
+          df = txt_base(),
+          well_keys = wells,
+          mode = input$txt_time_mode,
+          time_start = input$txt_time_start,
+          time_end = input$txt_time_end,
+          period_value = input$txt_period_select
+        )
 
-      p <- generate_plot(df, input$response_var, input$plot_type, boxplot_mode,
-                         selected_zone, input$theme_switch, oc$order, oc$colors
-      )
+        df_txt <- build_txt_trajectory_df(
+          df = txt_base(),
+          well_keys = wells,
+          time_range = rng,
+          target_points = input$txt_target_points
+        )
 
-      save_current_state(p)
-      if (log_it) log("🖼 Figure generated.")
-      invisible(TRUE)
+        rv$txt_spatial_current <- df_txt
+
+        if (log_it) {
+          log(sprintf(
+            "✅ TXT spatial dataset ready for figure generation (%s rows after aggregation, bin = %.3fs).",
+            nrow(df_txt),
+            attr(df_txt, "bin_s")
+          ))
+        }
+
+        invisible(TRUE)
+      }, error = function(e) {
+        if (log_it) log(paste("❌ TXT figure preparation failed:", e$message))
+        invisible(NULL)
+      })
     }
 
-    shiny::observeEvent(input$generate_figure, { make_plot(log_it = TRUE) })
+    shiny::observeEvent(input$generate_txt_figure, { make_plot(log_it = TRUE) })
 
-    shiny::observeEvent(list(
-      input$theme_switch,
-      input$boxplot_periods_mode, input$boxplot_delta_mode,
-      input$response_var, input$selected_zone,
-      input$lineplot_error_mode, input$time_unit_convert, input$time_unit_target, input$time_unit_original
-    ), {
-      df_exists <- switch(
-        isolate(input$plot_type),
-        "boxplot_periods"  = !is.null(rv$all_zone_combined_light_dark_boxplots[[isolate(input$response_var)]]),
-        "boxplot_cumulate" = !is.null(rv$all_zone_combined_cum_boxplots[[isolate(input$response_var)]]),
-        "boxplot_delta"    = !is.null(rv$all_zone_combined_delta_boxplots[[isolate(input$response_var)]]),
-        "lineplot"         = !is.null(rv$all_zone_combined_lineplots[[isolate(input$response_var)]]),
-        FALSE
-      )
-      if (isTRUE(df_exists)) make_plot(log_it = FALSE)
-    }, ignoreInit = TRUE)
+    shiny::observeEvent(
+      list(
+        input$theme_switch,
+        input$txt_plate_select,
+        input$txt_condition_select,
+        input$txt_well_select,
+        input$txt_time_mode,
+        input$txt_time_start,
+        input$txt_time_end,
+        input$txt_period_select,
+        input$txt_target_points,
+        input$txt_show_points
+      ),
+      {
+        if (identical(isolate(input$data_source_tabs), "txt") &&
+            !is.null(rv$txt_spatial_current)) {
+          make_plot(log_it = FALSE)
+        }
+      },
+      ignoreInit = TRUE
+    )
 
     # ==================================================================
     # Downloads
     # ==================================================================
-
     output$download_plot_script <- shiny::downloadHandler(
       filename = function() {
         var <- input$response_var
@@ -1594,10 +2416,7 @@ visualization_module_server <- function(id, rv, config) {
         )
 
         extra <- list(
-          # --- generate_plot uses this filter ---
           visible_conditions = input$visible_conditions %||% character(0),
-
-          # --- keep defaults aligned with generate_plot ---
           pt_size  = 2.3,
           pt_alpha = 0.65,
           jit_w    = 0.18,
@@ -1607,24 +2426,20 @@ visualization_module_server <- function(id, rv, config) {
           dodge_w  = 0.65
         )
 
-        # pooled colors (if relevant)
         if (input$plot_type == "boxplot_periods" && boxplot_mode == "pooled")
           extra$period_colors <- input$boxplot_periods_colors
 
         if (input$plot_type == "boxplot_delta" && boxplot_mode == "pooled")
           extra$phase_colors <- input$boxplot_delta_phase_colors
 
-        # delta needs transition
         if (input$plot_type == "boxplot_delta")
           extra$transition <- input$transition_select
 
-        # lineplot needs error mode + unit
         if (input$plot_type == "lineplot") {
           unit <- if (input$time_unit_convert == "Yes") input$time_unit_target else input$time_unit_original
           extra$time_unit  <- unit
           extra$error_mode <- input$lineplot_error_mode
         }
-
 
         script_content <- generate_r_script(
           df = df,

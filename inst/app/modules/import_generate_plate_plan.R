@@ -150,7 +150,7 @@ plate_plan_server <- function(id, rv) {
             rv$plate_plan_type <- lapply(plate_plan_list, detect_plate_type)
             for (i in seq_along(plate_plan_list)) {
               if (!"plate_id" %in% colnames(plate_plan_list[[i]])) {
-                plate_plan_list[[i]]$plate_id <- paste0("plate_", i)
+                plate_plan_list[[i]]$plate_id <- as.character(i)
               }
             }
 
@@ -535,7 +535,7 @@ generate_plate_plan_shiny <- function(inputs, plan_dir = "inputs/plate_plans", w
       df <- data.frame(
         animal    = paste0(wells_template, "_plate_", i),
         condition = plate_assign,
-        plate_id  = paste0("plate_", i),
+        plate_id  = as.character(i),
         stringsAsFactors = FALSE
       )
       attr(df, "file_name") <- sprintf("%s_plate_%d.xlsx", base_xlsx, i)

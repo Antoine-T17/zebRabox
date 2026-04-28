@@ -1,11 +1,13 @@
 # renv-deps.R
 # ------------------------------------------------------------------------------
 # Dependency discovery file for renv.
-# This file is NOT meant to be executed.
-# Its only purpose is to list libraries explicitly so renv can detect them and record them in renv.lock.
+# This file is NOT meant to be executed manually.
+# Its only purpose is to list packages explicitly so renv can detect them
+# and record them in renv.lock during renv::snapshot().
 # ------------------------------------------------------------------------------
 
 library(bslib)
+library(data.table)
 library(DT)
 library(dplyr)
 library(fmsb)
@@ -23,9 +25,10 @@ library(rhandsontable)
 library(sass)
 library(scales)
 library(shiny)
+library(shinycssloaders)
 library(shinydashboard)
-library(shinyjqui)
 library(shinyjs)
+library(shinyjqui)
 library(shinyWidgets)
 library(stringr)
 library(tidyr)
