@@ -1759,7 +1759,7 @@ visualization_module_server <- function(id, rv, config) {
               ggplot2::scale_fill_manual(values = cols_named, limits = ord) +
               ggplot2::scale_x_discrete(expand = ggplot2::expansion(add = x_pad)) +
               ggplot2::labs(y = sprintf("%s (Zone %s)", response_var, selected_zone),
-                            caption = "Each point corresponds to the mean value for one animal.") +
+                            caption = "Each point represents one animal averaged over the corresponding period.") +
               theme_obj +
               ggplot2::theme(legend.position = "none",
                              axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
@@ -1810,7 +1810,7 @@ visualization_module_server <- function(id, rv, config) {
             ggplot2::scale_colour_manual(values = rep(edge_col, length(per_levels)), guide = "none") +
             ggplot2::scale_x_discrete(expand = ggplot2::expansion(add = x_pad)) +
             ggplot2::labs(y = sprintf("%s (Zone %s)", response_var, selected_zone),
-                          caption = "Each point corresponds to the mean value for one animal.") +
+                          caption = "Each point represents one animal averaged over the corresponding period.") +
             theme_obj +
             ggplot2::theme(legend.position = "right",
                            axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
@@ -1855,7 +1855,7 @@ visualization_module_server <- function(id, rv, config) {
             ggplot2::scale_fill_manual(values = cols_named, limits = ord) +
             ggplot2::scale_x_discrete(expand = ggplot2::expansion(add = x_pad)) +
             ggplot2::labs(y = sprintf("Cumulative %s (Zone %s)", response_var, selected_zone),
-                          caption = "Each point corresponds to the cumulative value for one animal.") +
+                          caption = "Each point represents the cumulative response of one animal over the analysed duration.") +
             theme_obj +
             ggplot2::theme(legend.position = "none",
                            axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
@@ -1903,7 +1903,7 @@ visualization_module_server <- function(id, rv, config) {
               ggplot2::scale_fill_manual(values = cols_named, limits = ord) +
               ggplot2::scale_x_discrete(expand = ggplot2::expansion(add = x_pad)) +
               ggplot2::labs(y = sprintf("%s (Zone %s)", response_var, selected_zone),
-                            caption = "Each point is the mean per animal in the Before / Switch / After windows.") +
+                            caption = "Each point represents one animal averaged within the Before, Switch or After time window.") +
               theme_obj +
               ggplot2::theme(legend.position = "none",
                              axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
@@ -1946,7 +1946,7 @@ visualization_module_server <- function(id, rv, config) {
             ggplot2::scale_colour_manual(values = rep(edge_col, length(present_phase)), guide = "none") +
             ggplot2::scale_x_discrete(expand = ggplot2::expansion(add = x_pad)) +
             ggplot2::labs(y = sprintf("%s (Zone %s)", response_var, selected_zone),
-                          caption = "Each point is the mean per animal in the Before / Switch / After windows.") +
+                          caption = "Each point represents one animal averaged within the Before, Switch or After time window.") +
             theme_obj +
             ggplot2::theme(legend.position = "right",
                            axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
@@ -1995,7 +1995,7 @@ visualization_module_server <- function(id, rv, config) {
             ggplot2::labs(
               x = sprintf("Time (%s)", if (input$time_unit_convert == "Yes") input$time_unit_target else input$time_unit_original),
               y = sprintf("%s (Zone %s)", response_var, selected_zone),
-              caption = "Each line is the normalized response per condition over time."
+              caption = "Each line represents the mean per-animal response within each time window."
             ) +
             theme_obj +
             ggplot2::theme(plot.caption.position = "plot",
