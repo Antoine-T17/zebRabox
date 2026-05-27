@@ -35,7 +35,10 @@ server <- function(input, output, session) {
     secondary_mode      = NULL,
 
     # Optional: keep track of temp dirs created by unzip to allow cleanup on reset
-    tmp_unzip_dirs      = character()
+    tmp_unzip_dirs      = character(),
+
+    # Reset trigger: incremented on full reset; modules observe this to clear local state
+    app_reset_trigger   = 0L
   )
 
   # ------------------------------------------------------------------
@@ -170,6 +173,11 @@ server <- function(input, output, session) {
 
     rv$primary_mode                          <- NULL
     rv$secondary_mode                        <- NULL
+
+    rv$percentage_tables_list               <- NULL
+    rv$percentage_tables_plot_type          <- NULL
+    rv$stats_results                        <- NULL
+    rv$app_reset_trigger                    <- isolate(rv$app_reset_trigger) + 1L
 
     # ---- Reset fileInputs (Plate plan + Raw data + Processing uploads) ----
     # Plate plan module fileInput

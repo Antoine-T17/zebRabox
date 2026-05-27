@@ -4,49 +4,6 @@
 # Migrated from plotly -> ggiraph (single interactive mode, no Output Mode)
 # ======================================================================
 
-# ---- Local themes -----------------------------------------------------
-light_theme <- function(base_size = 11, base_family = "") {
-  ggplot2::theme_bw(base_size = base_size, base_family = base_family) +
-    ggplot2::theme(
-      plot.title   = ggplot2::element_text(color = "black", size = 14, hjust = .5),
-      axis.text    = ggplot2::element_text(color = "black", size = 16),
-      axis.title.x = ggplot2::element_text(color = "black", size = 16, margin = ggplot2::margin(t = 5, r = 15)),
-      axis.title.y = ggplot2::element_text(color = "black", size = 16, angle = 90, margin = ggplot2::margin(r = 10)),
-      legend.position = "right",
-      legend.text  = ggplot2::element_text(color = "black", size = 16, face = "italic"),
-      legend.title = ggplot2::element_blank(),
-      strip.text.x = ggplot2::element_text(size = 16),
-      strip.background = ggplot2::element_rect(fill = "white", colour = "black"),
-      panel.background = ggplot2::element_rect(fill = "white", colour = "black"),
-      plot.caption = ggplot2::element_text(color = "black", size = 16, hjust = 1, margin = ggplot2::margin(t = 10)),
-      panel.border = ggplot2::element_rect(color = "black", fill = NA)
-    )
-}
-
-dark_theme <- function(base_size = 11, base_family = "") {
-  ggplot2::theme_bw(base_size = base_size, base_family = base_family) +
-    ggplot2::theme(
-      plot.title   = ggplot2::element_text(color = "white", size = 16, hjust = .5),
-      axis.text    = ggplot2::element_text(color = "white", size = 16),
-      axis.title.x = ggplot2::element_text(color = "white", size = 16, margin = ggplot2::margin(t = 5, r = 15)),
-      axis.title.y = ggplot2::element_text(color = "white", size = 16, angle = 90, margin = ggplot2::margin(r = 10)),
-      legend.position = "right",
-      legend.text  = ggplot2::element_text(color = "white", size = 16, face = "italic"),
-      legend.title = ggplot2::element_blank(),
-      legend.background = ggplot2::element_rect(fill = "black"),
-      legend.key   = ggplot2::element_rect(fill = "black"),
-      strip.text.x = ggplot2::element_text(color = "white", size = 16),
-      strip.background = ggplot2::element_rect(fill = "black", color = "white"),
-      plot.background  = ggplot2::element_rect(fill = "black"),
-      panel.background = ggplot2::element_rect(fill = "black", colour = "white"),
-      panel.border     = ggplot2::element_rect(color = "white", fill = NA),
-      panel.grid.major = ggplot2::element_line(color = "grey30"),
-      panel.grid.minor = ggplot2::element_line(color = "grey30"),
-      plot.caption = ggplot2::element_text(color = "white", size = 16, hjust = 1, margin = ggplot2::margin(t = 10))
-    )
-}
-
-# ---- UI ---------------------------------------------------------------
 # ---- UI ---------------------------------------------------------------
 visualization_module_ui <- function(id, config) {
   ns  <- shiny::NS(id)
@@ -178,10 +135,33 @@ visualization_module_ui <- function(id, config) {
 
             shiny::uiOutput(ns("figure_selector")),
             shiny::div(style = "display:flex; flex-direction:column; gap:10px;",
-                       shiny::actionButton(ns("generate_figure"), "Generate Figure", style = "width:100%;"),
+                       shiny::div(
+                         style = "display:flex; align-items:center; gap:8px;",
+                         shiny::actionButton(ns("generate_figure"), "Generate Figure", style = "flex:1;"),
+                         shiny::actionLink(
+                           ns("figure_info"),
+                           label = NULL,
+                           icon = shiny::icon("circle-info"),
+                           title = "About this figure",
+                           style = "font-size:20px; color:#337ab7; flex-shrink:0;"
+                         )
+                       ),
                        shiny::conditionalPanel(
-                         condition = cond("plot_type","boxplot_delta"),
-                         shiny::actionButton(ns("generate_delta_tables"), "Generate Delta Percentage Tables", style = "width:100%;")
+                         condition = paste0(
+                           "['boxplot_periods','boxplot_cumulate','boxplot_delta']",
+                           ".indexOf(input['", ns("plot_type"), "']) !== -1"
+                         ),
+                         shiny::div(
+                           style = "display:flex; align-items:center; gap:8px;",
+                           shiny::actionButton(ns("generate_percentage"), "Generate Percentage", style = "flex:1;"),
+                           shiny::actionLink(
+                             ns("percentage_info"),
+                             label = NULL,
+                             icon  = shiny::icon("circle-info"),
+                             title = "About percentage calculations",
+                             style = "font-size:20px; color:#337ab7; flex-shrink:0;"
+                           )
+                         )
                        )
             )
           ),
@@ -287,9 +267,9 @@ visualization_module_ui <- function(id, config) {
                           shiny::conditionalPanel(
                             condition = cond("plot_type", "boxplot_delta"),
                             shiny::div(
-                              style = "margin-top: 25px; border-top: 1px solid #ccc; padding-top: 15px;",
+                              style = "margin-top: 25px; border-top: 1px solid #ccc; padding-top: 15px; width: 100%; box-sizing: border-box;",
                               shiny::h5("Delta Time Explorer (Live Preview)", style = "text-align:center; margin-bottom:10px;"),
-                              ggiraph::girafeOutput(ns("delta_time_explorer"), width = "100%", height = "320px"),
+                              ggiraph::girafeOutput(ns("delta_time_explorer"), width = "100%", height = "450px"),
                               shiny::helpText(
                                 "The delta time window defines three phases: Before [t-Δ,t), Switch [t,t+Δ), After [t+Δ,t+2Δ)",
                                 style = "text-align:center; font-size:11px; margin-top:8px;"
@@ -318,16 +298,82 @@ visualization_module_ui <- function(id, config) {
                           )
           ),
 
-          shiny::tabPanel("Delta Percentage Tables", value = "delta_percentage_tables",
-                          shiny::selectInput(ns("delta_table_type"), "Table Type",
-                                             c("Momentum Comparisons","Condition Comparisons"), "Momentum Comparisons"
+          shiny::tabPanel("Percentage Tables", value = "percentage_tables",
+                          shiny::selectInput(ns("pct_table_var"), "Response Variable", choices = "", selected = ""),
+                          shiny::helpText(
+                            "Columns 'mean_A' / 'median_A' refer to the first condition in the comparison pair;",
+                            "'mean_B' / 'median_B' to the second. Percentage: (B − A) / |A| × 100."
                           ),
-                          shiny::selectInput(ns("delta_table_var"), "Response Variable", choices = "", selected = ""),
-                          DT::dataTableOutput(ns("delta_percentage_table")),
-                          shiny::div(style="margin-top:10px; margin-bottom:10px;",
-                                     shiny::downloadButton(ns("download_current_delta_table"), "Download Current Table (.xlsx)"),
-                                     shiny::downloadButton(ns("download_all_delta_tables"), "Download All Delta Tables (.zip)")
+                          DT::dataTableOutput(ns("percentage_table")),
+                          shiny::div(style = "margin-top:10px; margin-bottom:10px;",
+                                     shiny::downloadButton(ns("download_percentage_table"), "Download Table (.xlsx)")
                           )
+          ),
+
+          shiny::tabPanel("Statistics", value = "statistics",
+            shiny::fluidRow(
+              shiny::column(4,
+                shiny::selectInput(ns("stat_plot_type"), "Plot Type",
+                  choices = c(
+                    "Boxplot Periods"    = "boxplot_periods",
+                    "Boxplot Cumulative" = "boxplot_cumulate",
+                    "Boxplot Delta"      = "boxplot_delta",
+                    "Lineplot"           = "lineplot"
+                  ),
+                  selected = "boxplot_periods"
+                )
+              ),
+              shiny::column(4,
+                shiny::selectInput(ns("stat_response_var"), "Response Variable",
+                  choices = "", selected = "")
+              ),
+              shiny::column(4,
+                shiny::selectInput(ns("stat_zone"), "Zone",
+                  choices = "", selected = "")
+              )
+            ),
+            shiny::fluidRow(
+              shiny::column(4,
+                shiny::radioButtons(ns("stat_comparison_type"), "Comparison Type",
+                  choices = c(
+                    "All conditions vs each other" = "all_vs_all",
+                    "All conditions vs a control"  = "vs_control"
+                  ),
+                  selected = "all_vs_all"
+                )
+              ),
+              shiny::column(4,
+                shiny::conditionalPanel(
+                  condition = paste0("input['", ns("stat_comparison_type"), "'] == 'vs_control'"),
+                  shiny::selectInput(ns("stat_control_condition"), "Control Condition",
+                    choices = "", selected = "")
+                )
+              ),
+              shiny::column(4,
+                shiny::radioButtons(ns("stat_sample_type"), "Sample Type",
+                  choices = c(
+                    "Independent samples" = "independent",
+                    "Paired samples"      = "paired"
+                  ),
+                  selected = "independent"
+                )
+              )
+            ),
+            shiny::div(
+              style = "margin-bottom:12px;",
+              shiny::actionButton(ns("run_statistics"), "Run Statistics",
+                icon = shiny::icon("calculator"))
+            ),
+            shiny::hr(),
+            shiny::tabsetPanel(
+              id = ns("stats_output_tabs"),
+              shiny::tabPanel("Tables",
+                shiny::uiOutput(ns("stats_tables_ui"))
+              ),
+              shiny::tabPanel("Figures",
+                shiny::uiOutput(ns("stats_figures_ui"))
+              )
+            )
           )
         )
       )
@@ -352,29 +398,23 @@ visualization_module_server <- function(id, rv, config) {
       console_messages(c(old, paste(...)))
     }
 
+    # Cached reactive: prepare_all_zone() recomputes only when processing_results changes
+    az_cached <- shiny::reactive({
+      shiny::req(rv$processing_results)
+      prepare_all_zone(rv$processing_results$processed_data_list, cfg())
+    })
+
+    shiny::observe({
+      az <- az_cached()
+      rv$all_zone_combined <- az
+    })
+
     # Keep both last ggplot + last girafe widget
     rv$plot_gg     <- NULL
     rv$plot_girafe <- NULL
-
-    convert_time <- function(x, from, to) {
-      if (from == to) return(x)
-      f <- c(seconds = 1, minutes = 60, hours = 3600, days = 86400)
-      x * f[[from]] / f[[to]]
-    }
-
-    ensure_colors <- function(n, cols = character(0)) {
-      cols <- cols[!is.na(cols) & nzchar(trimws(cols))]
-      if (length(cols) == 0) {
-        base <- tryCatch(RColorBrewer::brewer.pal(min(8, max(3, n)), "Set1"),
-                         error = function(e) grDevices::rainbow(min(8, max(3, n)))
-        )
-        return(grDevices::colorRampPalette(base)(n))
-      }
-      cols <- trimws(cols)
-      if (length(cols) < n) cols <- rep(cols, length.out = n)
-      if (length(cols) > n) cols <- cols[seq_len(n)]
-      cols
-    }
+    rv$percentage_tables_list      <- NULL
+    rv$percentage_tables_plot_type <- NULL
+    rv$stats_results               <- NULL
 
     # ---- ggiraph wrapper (fills container + zoom + toolbar) ----
     to_girafe <- function(p, width_svg = 25, height_svg = 9) {
@@ -395,15 +435,17 @@ visualization_module_server <- function(id, rv, config) {
 
     update_response_choices <- function(vars, read_current = TRUE) {
       if (is.null(vars) || !length(vars)) return()
-      rv_sel <- ""; ds_sel <- ""; dt_sel <- vars[1]
+      rv_sel <- ""; ds_sel <- ""; pct_sel <- vars[1]; stat_sel <- vars[1]
       if (isTRUE(read_current)) {
-        if (!is.null(input$response_var) && isolate(input$response_var) %in% vars) rv_sel <- isolate(input$response_var)
-        if (!is.null(input$dataset_response_var) && isolate(input$dataset_response_var) %in% vars) ds_sel <- isolate(input$dataset_response_var)
-        if (!is.null(input$delta_table_var) && isolate(input$delta_table_var) %in% vars) dt_sel <- isolate(input$delta_table_var)
+        if (!is.null(input$response_var)         && isolate(input$response_var)         %in% vars) rv_sel   <- isolate(input$response_var)
+        if (!is.null(input$dataset_response_var) && isolate(input$dataset_response_var) %in% vars) ds_sel   <- isolate(input$dataset_response_var)
+        if (!is.null(input$pct_table_var)        && isolate(input$pct_table_var)        %in% vars) pct_sel  <- isolate(input$pct_table_var)
+        if (!is.null(input$stat_response_var)    && isolate(input$stat_response_var)    %in% vars) stat_sel <- isolate(input$stat_response_var)
       }
       shiny::updateSelectInput(session, "response_var",         choices = c("", vars), selected = rv_sel)
       shiny::updateSelectInput(session, "dataset_response_var", choices = c("", vars), selected = ds_sel)
-      shiny::updateSelectInput(session, "delta_table_var",      choices = c("", vars), selected = dt_sel)
+      shiny::updateSelectInput(session, "pct_table_var",        choices = c("", vars), selected = pct_sel)
+      shiny::updateSelectInput(session, "stat_response_var",    choices = c("", vars), selected = stat_sel)
     }
 
     shiny::observeEvent(cfg(), {
@@ -418,231 +460,15 @@ visualization_module_server <- function(id, rv, config) {
     )
 
     # ==================================================================
-    # DATASET BUILDERS
-    # ==================================================================
-    prepare_all_zone <- function() {
-      shiny::req(rv$processing_results, "processed_data_list" %in% names(rv$processing_results))
-      mode  <- cfg()$mode %||% "unknown"
-      is_qm <- grepl("^qm", mode)
-
-      rv$processed_data_list <- purrr::map(
-        rv$processing_results$processed_data_list,
-        ~{
-          .x <- dplyr::mutate(.x, plate_id = as.character(plate_id))
-
-          if (all(c("smldist","lardist","inadist") %in% names(.x))) {
-            .x <- .x |> dplyr::mutate(
-              totaldist = smldist + lardist + inadist,
-              totaldur  = smldur  + lardur  + inadur,
-              totalct   = smlct   + larct   + inact,
-              totalspeed = totaldist / pmax(totaldur, 1),
-              smlspeed   = smldist / pmax(smldur, 1),
-              larspeed   = lardist / pmax(lardur, 1),
-              inaspeed   = inadist / pmax(inadur, 1)
-            )
-          }
-
-          if (is_qm && all(c("frect","midct","burct","zerct") %in% names(.x))) {
-            .x <- .x |> dplyr::mutate(
-              totaldist  = frect + midct + burct + zerct,
-              totaldur   = fredur + middur + burdur + zerdur,
-              totalct    = 0,
-              totalspeed = totaldist / pmax(totaldur, 1)
-            )
-          }
-          .x
-        }
-      )
-
-      rv$all_zone_combined <- dplyr::bind_rows(rv$processed_data_list)
-      rv$all_zone_combined
-    }
-
-    build_periods_df <- function(az, v, cfg) {
-      periods <- unique(az$period_without_numbers)
-      keys    <- cfg$period_keys
-      labels  <- cfg$period_labels %||% keys
-      if (is.null(keys) || length(keys) == 0) stop("Configuration error: 'period_keys' is empty.")
-
-      found_keys <- character(0)
-      found_labels <- character(0)
-
-      for (i in seq_along(keys)) {
-        p_match <- grep(keys[i], periods, ignore.case = TRUE, value = TRUE)
-        if (length(p_match) > 0) {
-          found_keys   <- c(found_keys, p_match[1])
-          found_labels <- c(found_labels, labels[i])
-        }
-      }
-
-      if (length(found_keys) == 0) {
-        stop(sprintf(
-          "No periods matching any of %s found in data. Available: %s",
-          paste("'", keys, "'", collapse = ", "),
-          paste("'", periods, "'", collapse = ", ")
-        ))
-      }
-
-      out <- az |>
-        dplyr::filter(period_without_numbers %in% found_keys)
-
-      idx_raw <- isolate(input$period_indices_keep)
-      if (!is.null(idx_raw) && nzchar(trimws(idx_raw))) {
-        idx_keep <- trimws(strsplit(idx_raw, ",")[[1]])
-        idx_keep <- idx_keep[nzchar(idx_keep)]
-
-        out <- out |>
-          dplyr::mutate(
-            .period_idx = sub(".*_([0-9]+)$", "\\1", as.character(period_with_numbers))
-          ) |>
-          dplyr::filter(.period_idx %in% idx_keep) |>
-          dplyr::select(-.period_idx)
-      }
-
-      out |>
-        dplyr::group_by(period_without_numbers, zone, condition_tagged, plate_id) |>
-        dplyr::summarise(
-          plate_id = dplyr::first(as.character(plate_id)),
-          start = dplyr::first(start),
-          period_with_numbers = dplyr::first(period_with_numbers),
-          condition_grouped = dplyr::first(condition_grouped),
-          condition = dplyr::first(condition),
-          animal = dplyr::first(animal),
-          mean_val = mean(.data[[v]], na.rm = TRUE),
-          .groups = "drop"
-        ) |>
-        dplyr::mutate(
-          period_without_numbers = factor(period_without_numbers, levels = found_keys, labels = found_labels)
-        ) |>
-        dplyr::select(dplyr::any_of(c(
-          "zone", "condition_grouped", "condition_tagged", "condition",
-          "start", "plate_id", "animal",
-          "period_without_numbers", "period_with_numbers", "mean_val"
-        )))
-    }
-
-    build_cumulate_df <- function(az, v) {
-      az |>
-        dplyr::group_by(condition_grouped, zone, plate_id, animal) |>
-        dplyr::summarise(
-          cum = sum(.data[[v]], na.rm = TRUE),
-          condition_tagged = dplyr::first(condition_tagged),
-          .groups = "drop"
-        ) |>
-        dplyr::mutate(plate_id = as.character(plate_id)) |>
-        dplyr::select(dplyr::any_of(c(
-          "zone","condition_grouped","condition_tagged","plate_id","animal","cum"
-        )))
-    }
-
-    build_delta_split <- function(az, vars, transition, delta_sec, round_to = NULL) {
-      shiny::req("boundary_associations_list" %in% names(rv$processing_results))
-      b <- dplyr::bind_rows(get_boundaries_list()) |> dplyr::distinct()
-      if (!nrow(b)) return(NULL)
-
-      b_clean <- b |>
-        dplyr::mutate(plate_id = as.character(plate_id)) |>
-        dplyr::arrange(transition, plate_id, time_switch)|>
-        dplyr::group_by(transition, plate_id) |>
-        dplyr::slice_head(n = 1) |>
-        dplyr::ungroup() |>
-        dplyr::filter(transition == !!transition) |>
-        dplyr::select(plate_id, time_switch)
-
-      joined <- az |>
-        dplyr::mutate(
-          plate_id = as.character(plate_id),
-          start_for_cut = if (!is.null(round_to)) floor(start / round_to) * round_to else start
-        ) |>
-        dplyr::inner_join(b_clean, by = "plate_id", relationship = "many-to-many") |>
-        dplyr::mutate(
-          phase_raw = dplyr::case_when(
-            start_for_cut >= time_switch - delta_sec & start_for_cut < time_switch ~ "before",
-            start_for_cut >= time_switch & start_for_cut < time_switch + delta_sec ~ "switch",
-            start_for_cut >= time_switch + delta_sec & start_for_cut < time_switch + 2*delta_sec ~ "after",
-            TRUE ~ NA_character_
-          )
-        ) |>
-        dplyr::filter(!is.na(phase_raw)) |>
-        dplyr::mutate(
-          transition_phase = paste0(transition, "_", phase_raw),
-          period_without_numbers = dplyr::recode(phase_raw, before = "Before", switch = "Switch", after = "After"),
-          period_with_numbers = paste0(transition, "_", period_without_numbers)
-        )
-
-      if (!nrow(joined)) return(NULL)
-
-      phased_long <- tidyr::pivot_longer(
-        joined, cols = tidyselect::all_of(vars),
-        names_to = "variable", values_to = "value"
-      ) |>
-        dplyr::group_by(
-          transition_phase, period_without_numbers, period_with_numbers,
-          zone, condition_tagged, plate_id, animal, variable
-        ) |>
-        dplyr::summarise(
-          mean_val = mean(value, na.rm = TRUE),
-          condition_grouped = dplyr::first(condition_grouped),
-          start = dplyr::first(start),
-          .groups = "drop"
-        ) |>
-        dplyr::select(dplyr::any_of(c(
-          "zone","condition_grouped","condition_tagged",
-          "plate_id","animal","mean_val",
-          "period_without_numbers","period_with_numbers",
-          "transition_phase","variable","start"
-        )))
-
-      split(phased_long, phased_long$variable)
-    }
-
-    build_lineplot_df <- function(az, v, agg_period, unit_from, unit_to, convert) {
-      agg_unit <- if (identical(convert, "Yes")) unit_to else unit_from
-      agg_s    <- convert_time(as.numeric(agg_period), agg_unit, "seconds")
-      gvar     <- "condition_grouped"
-
-      per_well <- az |>
-        dplyr::mutate(
-          plate_id = as.character(plate_id),
-          start_rounded = floor(start / agg_s) * agg_s
-        ) |>
-        dplyr::group_by(.data[[gvar]], zone, start_rounded, plate_id, animal) |>
-        dplyr::summarise(
-          var_value_per_well = sum(.data[[v]], na.rm = TRUE),
-          .groups = "drop"
-        )
-
-      summary_df <- per_well |>
-        dplyr::group_by(.data[[gvar]], zone, start_rounded) |>
-        dplyr::summarise(
-          total_val     = sum(var_value_per_well, na.rm = TRUE),
-          mean_per_well = mean(var_value_per_well, na.rm = TRUE),
-          sd_per_well   = stats::sd(var_value_per_well, na.rm = TRUE),
-          n_wells       = dplyr::n(),
-          .groups = "drop"
-        ) |>
-        dplyr::mutate(se_per_well = sd_per_well / sqrt(pmax(n_wells, 1)))
-
-      per_well |>
-        dplyr::left_join(summary_df, by = c(gvar, "zone", "start_rounded")) |>
-        dplyr::mutate(
-          start_rounded = if (!identical(unit_from, agg_unit))
-            convert_time(start_rounded, "seconds", agg_unit) else start_rounded
-        ) |>
-        dplyr::rename(val_per_well = mean_per_well) |>
-        dplyr::select(dplyr::any_of(c(
-          "zone", gvar, "start_rounded",
-          "plate_id","animal",
-          "total_val","n_wells","val_per_well","se_per_well","sd_per_well"
-        )))
-    }
-
-    # ==================================================================
     # UI bits
     # ==================================================================
     shiny::observeEvent(input$clear_console, {
       console_messages("👋 Ready.")
     })
+
+    shiny::observeEvent(rv$app_reset_trigger, {
+      console_messages("👋 Ready.")
+    }, ignoreInit = TRUE, ignoreNULL = TRUE)
 
     txt_base <- shiny::reactive({
       tryCatch(
@@ -1003,13 +829,15 @@ visualization_module_server <- function(id, rv, config) {
         dplyr::summarise(mean_val = mean(.data[[v]], na.rm = TRUE), .groups = "drop")
       if (!nrow(line_df)) return(NULL)
 
+      oc <- tryCatch(order_and_colors(line_df), error = function(e) list(order = NULL, colors = NULL))
+
       yr  <- range(line_df$mean_val, na.rm = TRUE)
       pad <- diff(yr) * 0.06
       ymin <- yr[1] - pad
       ymax <- yr[2] + pad
 
       theme_is_light <- tolower(input$theme_switch) == "light"
-      theme_obj <- if (theme_is_light) ggplot2::theme_bw(base_size = 11) else dark_theme()
+      theme_obj <- if (theme_is_light) light_theme() else dark_theme()
       edge_col  <- if (theme_is_light) "black" else "white"
 
       bands <- data.frame(
@@ -1045,6 +873,10 @@ visualization_module_server <- function(id, rv, config) {
           panel.grid.minor = ggplot2::element_line(colour = scales::alpha(edge_col, 0.20))
         )
 
+      if (!is.null(oc$colors) && length(oc$colors)) {
+        p <- p + ggplot2::scale_colour_manual(values = oc$colors, limits = oc$order, na.value = "grey70", name = "Condition")
+      }
+
       to_girafe(p, width_svg = 12, height_svg = 9)
     })
 
@@ -1058,12 +890,12 @@ visualization_module_server <- function(id, rv, config) {
         shiny::withProgress(message = "Generating periods datasets...", value = 0, {
           incProgress(0.2)
 
-          az <- prepare_all_zone()
+          az <- az_cached()
           current_cfg <- cfg()
           incProgress(0.6)
 
           rv$all_zone_combined_light_dark_boxplots <- stats::setNames(
-            lapply(EXPECTED_VARS(), function(v) build_periods_df(az, v, current_cfg)),
+            lapply(EXPECTED_VARS(), function(v) build_periods_df(az, v, current_cfg, period_indices_keep = isolate(input$period_indices_keep))),
             EXPECTED_VARS()
           )
 
@@ -1079,11 +911,11 @@ visualization_module_server <- function(id, rv, config) {
     shiny::observeEvent(input$period_indices_keep, {
       shiny::req(!is.null(rv$all_zone_combined_light_dark_boxplots))
       tryCatch({
-        az <- prepare_all_zone()
+        az <- az_cached()
         current_cfg <- cfg()
 
         rv$all_zone_combined_light_dark_boxplots <- stats::setNames(
-          lapply(EXPECTED_VARS(), function(v) build_periods_df(az, v, current_cfg)),
+          lapply(EXPECTED_VARS(), function(v) build_periods_df(az, v, current_cfg, period_indices_keep = isolate(input$period_indices_keep))),
           EXPECTED_VARS()
         )
         log("✅ Periods datasets updated (indices filter).")
@@ -1101,7 +933,7 @@ visualization_module_server <- function(id, rv, config) {
         shiny::withProgress(message = "Generating cumulative datasets...", value = 0, {
           incProgress(0.3)
 
-          az <- prepare_all_zone()
+          az <- az_cached()
           incProgress(0.7)
 
           rv$all_zone_combined_cum_boxplots <- stats::setNames(
@@ -1135,11 +967,12 @@ visualization_module_server <- function(id, rv, config) {
           shiny::req(validate_num_pos(input$delta_time, "Delta time window must be a positive number."))
           incProgress(0.2)
 
-          az <- prepare_all_zone()
+          az <- az_cached()
           delta_sec <- as.numeric(input$delta_time)
           incProgress(0.7)
 
-          split_list <- build_delta_split(az, EXPECTED_VARS(), input$transition_select, delta_sec)
+          split_list <- build_delta_split(az, EXPECTED_VARS(), input$transition_select, delta_sec,
+                                           boundaries_df = dplyr::bind_rows(get_boundaries_list()) |> dplyr::distinct())
           rv$all_zone_combined_delta_boxplots <- split_list
 
           incProgress(1)
@@ -1159,7 +992,7 @@ visualization_module_server <- function(id, rv, config) {
           shiny::req(validate_num_pos(input$aggregation_period, "Aggregation period must be a positive number."))
           incProgress(0.2)
 
-          az <- prepare_all_zone()
+          az <- az_cached()
           incProgress(0.6)
 
           rv$all_zone_combined_lineplots <- stats::setNames(
@@ -1224,11 +1057,10 @@ visualization_module_server <- function(id, rv, config) {
     }, ignoreInit = TRUE)
 
     # ==================================================================
-    # TXT spatial helpers
+    # TXT spatial helpers — add_txt_keys, estimate_txt_dt,
+    # resolve_txt_selected_wells, resolve_txt_time_range,
+    # build_txt_trajectory_df moved to R/visualization.R
     # ==================================================================
-    add_txt_keys <- function(df) {
-      dplyr::mutate(df, well_key = paste(plate_id, animal, sep = "__"))
-    }
 
     get_txt_source_list <- function() {
       shiny::req(rv$processing_results)
@@ -1277,163 +1109,6 @@ visualization_module_server <- function(id, rv, config) {
         ) |>
         dplyr::filter(is.finite(T), is.finite(X), is.finite(Y)) |>
         dplyr::arrange(plate_id, animal, T)
-    }
-
-    estimate_txt_dt <- function(df) {
-      dt <- df |>
-        dplyr::summarise(dt = stats::median(diff(sort(unique(T))), na.rm = TRUE)) |>
-        dplyr::pull(dt)
-
-      if (!is.finite(dt) || dt <= 0) dt <- 1 / 25
-      dt
-    }
-
-    resolve_txt_selected_wells <- function(df, plate_ids = NULL, selected_conditions = character(0), selected_wells = character(0)) {
-      df <- add_txt_keys(df)
-
-      if (!is.null(plate_ids) && length(plate_ids)) {
-        df <- df |>
-          dplyr::filter(plate_id %in% plate_ids)
-      }
-
-      if (!nrow(df)) return(character(0))
-
-      if (!is.null(selected_conditions) && length(selected_conditions)) {
-        df <- df |>
-          dplyr::filter(condition_grouped %in% selected_conditions)
-      }
-
-      available_wells <- unique(df$well_key)
-
-      if (!is.null(selected_wells) && length(selected_wells)) {
-        return(intersect(selected_wells, available_wells))
-      }
-
-      if (!is.null(selected_conditions) && length(selected_conditions)) {
-        return(available_wells)
-      }
-
-      character(0)
-    }
-
-    resolve_txt_time_range <- function(df, well_keys, mode, time_start = NULL, time_end = NULL, period_value = NULL) {
-      df <- add_txt_keys(df)
-
-      sub <- df |>
-        dplyr::filter(well_key %in% well_keys)
-
-      if (!nrow(sub)) stop("No TXT data for selected wells.")
-
-      if (identical(mode, "manual")) {
-        tmin <- suppressWarnings(as.numeric(time_start))
-        tmax <- suppressWarnings(as.numeric(time_end))
-
-        if (!is.finite(tmin) || !is.finite(tmax) || tmax <= tmin) {
-          stop("Invalid manual time window. End time must be greater than start time.")
-        }
-
-        return(c(tmin, tmax))
-      }
-
-      if (identical(mode, "period")) {
-        if (is.null(period_value) || !nzchar(period_value)) {
-          stop("Please select a period.")
-        }
-
-        subp <- sub |>
-          dplyr::filter(period_with_numbers == period_value)
-
-        if (!nrow(subp)) {
-          stop("No TXT data found for the selected period.")
-        }
-
-        return(range(subp$T, na.rm = TRUE))
-      }
-
-      stop("Unknown TXT time mode.")
-    }
-
-    build_txt_trajectory_df <- function(df, well_keys, time_range, target_points = 100) {
-      shiny::req(length(well_keys) > 0, length(time_range) == 2)
-
-      if (length(unique(well_keys)) > 96) {
-        stop("Please select at most 96 wells for TXT trajectory visualization.")
-      }
-
-      df <- add_txt_keys(df)
-
-      tmin <- min(time_range)
-      tmax <- max(time_range)
-
-      sub <- df |>
-        dplyr::filter(
-          well_key %in% well_keys,
-          T >= tmin,
-          T <= tmax
-        ) |>
-        dplyr::filter(!(X == 0 & Y == 0))
-
-      if (!nrow(sub)) {
-        stop("No TXT data available for the selected wells / time window.")
-      }
-
-      native_dt <- estimate_txt_dt(sub)
-      window_len <- max(tmax - tmin, native_dt)
-
-      target_points <- max(25, suppressWarnings(as.numeric(target_points)))
-      if (!is.finite(target_points)) target_points <- 250
-
-      bin_s <- max(native_dt, window_len / target_points)
-
-      out <- sub |>
-        dplyr::mutate(
-          time_bin = floor((T - tmin) / bin_s),
-          well_id = animal,
-          condition_grouped = dplyr::if_else(
-            is.na(condition_grouped) | condition_grouped == "",
-            "Unknown",
-            condition_grouped
-          )
-        ) |>
-        dplyr::group_by(
-          plate_id,
-          animal, well_key, well_id,
-          condition_grouped, condition_tagged, zone,
-          time_bin
-        ) |>
-        dplyr::summarise(
-          T = mean(T, na.rm = TRUE),
-          X = mean(X, na.rm = TRUE),
-          Y = mean(Y, na.rm = TRUE),
-          n_raw = dplyr::n(),
-          .groups = "drop"
-        ) |>
-        dplyr::filter(
-          is.finite(X), is.finite(Y),
-          !(X == 0 & Y == 0)
-        ) |>
-        dplyr::arrange(condition_grouped, plate_id, animal, T) |>
-        dplyr::group_by(plate_id, animal) |>
-        dplyr::mutate(
-          point_id = paste0("traj_", plate_id, "_", animal, "_", dplyr::row_number()),
-          path_id  = paste0("path_", plate_id, "_", animal),
-          tooltip  = paste0(
-            "Plate: ", plate_id,
-            "<br>Well: ", animal,
-            "<br>Condition: ", condition_grouped,
-            "<br>t = ", sprintf("%.2f", T), " s",
-            "<br>X = ", sprintf("%.1f", X),
-            "<br>Y = ", sprintf("%.1f", Y),
-            "<br>Mean of ", n_raw, " raw points"
-          )
-        ) |>
-        dplyr::ungroup()
-
-      attr(out, "bin_s") <- bin_s
-      attr(out, "native_dt") <- native_dt
-      attr(out, "time_range") <- c(tmin, tmax)
-
-      out
     }
 
     generate_txt_plot <- function(df, theme_choice, show_points = TRUE) {
@@ -1695,13 +1370,13 @@ visualization_module_server <- function(id, rv, config) {
       if (!length(vis)) {
         return(ggplot2::ggplot() +
                  ggplot2::annotate("text", x = 0, y = 0, label = "No condition selected") +
-                 ggplot2::theme_void())
+                 void_theme())
       }
       sub <- sub[sub$condition_grouped %in% vis, , drop = FALSE]
       if (!nrow(sub)) {
         return(ggplot2::ggplot() +
                  ggplot2::annotate("text", x = 0, y = 0, label = "No data after filtering") +
-                 ggplot2::theme_void())
+                 void_theme())
       }
 
       theme_is_light <- tolower(theme_choice) == "light"
@@ -1958,6 +1633,11 @@ visualization_module_server <- function(id, rv, config) {
 
       if (plot_type == "lineplot") {
 
+        # val_per_well is the condition-level mean — identical for all animals at
+        # the same (condition, time_bin). Deduplicate to avoid rendering 96× more
+        # points than needed by ggiraph, which dominates rendering time.
+        sub <- dplyr::distinct(sub, .data[[gvar]], start_rounded, .keep_all = TRUE)
+
         gg <- ggplot2::ggplot(sub,
                               ggplot2::aes(x = start_rounded, y = val_per_well,
                                            colour = .data[[gvar]], group = .data[[gvar]]))
@@ -2211,7 +1891,7 @@ visualization_module_server <- function(id, rv, config) {
           if (is.null(input$response_var) || !nzchar(input$response_var)) {
             p0 <- ggplot2::ggplot() +
               ggplot2::annotate("text", x = 0, y = 0, label = "Select a response variable") +
-              ggplot2::theme_void()
+              void_theme()
             return(to_girafe(p0, width_svg = 12, height_svg = 9))
           }
 
@@ -2226,7 +1906,7 @@ visualization_module_server <- function(id, rv, config) {
           if (is.null(df) || !nrow(df)) {
             p0 <- ggplot2::ggplot() +
               ggplot2::annotate("text", x = 0, y = 0, label = "Generate datasets first") +
-              ggplot2::theme_void()
+              void_theme()
             return(to_girafe(p0, width_svg = 12, height_svg = 9))
           }
 
@@ -2239,7 +1919,7 @@ visualization_module_server <- function(id, rv, config) {
             if (!length(zones)) {
               p0 <- ggplot2::ggplot() +
                 ggplot2::annotate("text", x = 0, y = 0, label = "No zones available") +
-                ggplot2::theme_void()
+                void_theme()
               return(to_girafe(p0, width_svg = 12, height_svg = 9))
             }
             selected_zone <- as.character(zones[1])
@@ -2275,7 +1955,7 @@ visualization_module_server <- function(id, rv, config) {
           if (is.null(rv$txt_spatial_current) || !nrow(rv$txt_spatial_current)) {
             p0 <- ggplot2::ggplot() +
               ggplot2::annotate("text", x = 0, y = 0, label = "Generate a TXT dataset first") +
-              ggplot2::theme_void()
+              void_theme()
             return(to_girafe(p0, width_svg = 12, height_svg = 9))
           }
 
@@ -2292,7 +1972,7 @@ visualization_module_server <- function(id, rv, config) {
           return(to_girafe(p, width_svg = 12, height_svg = 9))
         }
 
-        p0 <- ggplot2::ggplot() + ggplot2::theme_void()
+        p0 <- ggplot2::ggplot() + void_theme()
         to_girafe(p0, width_svg = 12, height_svg = 9)
 
       }, error = function(e) {
@@ -2300,7 +1980,7 @@ visualization_module_server <- function(id, rv, config) {
 
         p_err <- ggplot2::ggplot() +
           ggplot2::annotate("text", x = 0, y = 0, label = "Figure generation failed") +
-          ggplot2::theme_void()
+          void_theme()
 
         to_girafe(p_err, width_svg = 12, height_svg = 9)
       })
@@ -2499,110 +2179,181 @@ visualization_module_server <- function(id, rv, config) {
     )
 
     # ==================================================================
-    # Delta Percentage Tables
+    # Percentage Tables
     # ==================================================================
-    compute_delta_percentages <- function(df, var) {
-      shiny::req(df, var %in% names(df))
-      tr <- input$transition_select
-      df <- dplyr::filter(df, grepl(paste0("^", tr, "_"), transition_phase))
-      df$phase <- gsub(paste0("^", tr, "_"), "", df$transition_phase)
-      df$phase <- dplyr::recode(df$phase, before = "Before", switch = "Switch", after = "After")
-      present <- intersect(c("Before","Switch","After"), unique(df$phase))
-      if (length(present) < 2) return(NULL)
-      df <- df |> dplyr::filter(phase %in% present)
+    compute_percentage_table <- function(df, plot_type, transition = NULL) {
+      val_col <- switch(
+        plot_type,
+        "boxplot_periods"  = "mean_val",
+        "boxplot_cumulate" = "cum",
+        "boxplot_delta"    = "mean_val",
+        NULL
+      )
+      if (is.null(val_col) || !val_col %in% names(df)) return(NULL)
 
-      if (input$delta_table_type == "Momentum Comparisons") {
-        comps <- list("Before_to_Switch" = c("Before","Switch"), "Switch_to_After" = c("Switch","After"))
-        purrr::map_dfr(names(comps), function(name) {
-          p1 <- comps[[name]][1]; p2 <- comps[[name]][2]
-          df12 <- df |> dplyr::filter(phase %in% c(p1,p2))
-          if (!nrow(df12)) return(NULL)
-          df12 |>
-            dplyr::group_by(condition_grouped, zone, plate_id, animal) |>
-            dplyr::filter(n() == 2) |>
-            dplyr::summarise(
-              val1 = mean_val[phase == p1],
-              val2 = mean_val[phase == p2],
-              pct_change = ((val2 - val1) / pmax(val1, 1e-6)) * 100,
-              .groups = "drop"
-            ) |>
-            dplyr::mutate(comparison = name)
-        })
+      if (plot_type == "boxplot_delta") {
+        if (is.null(transition) || !nzchar(transition)) return(NULL)
+        df <- dplyr::filter(df, grepl(paste0("^", transition, "_"), transition_phase))
+        df$phase <- gsub(paste0("^", transition, "_"), "", df$transition_phase)
+        df$phase <- dplyr::recode(df$phase,
+                                   before = "Before", switch = "Switch", after = "After",
+                                   .default = NA_character_)
+        df <- dplyr::filter(df, !is.na(phase))
+        group_col   <- "phase"
+        group_order <- c("Before", "Switch", "After")
+      } else if (plot_type == "boxplot_periods") {
+        group_col   <- "period_without_numbers"
+        group_order <- NULL
       } else {
-        df |>
-          dplyr::group_by(phase, zone) |>
-          dplyr::do({
-            d <- .
-            conds <- unique(d$condition_grouped)
-            if (length(conds) < 2) return(NULL)
-            combos <- utils::combn(conds, 2, simplify = FALSE)
-            purrr::map_dfr(combos, function(pair) {
-              c1 <- pair[1]; c2 <- pair[2]
-              d12 <- d |> dplyr::filter(condition_grouped %in% pair)
-              if (!nrow(d12)) return(NULL)
-              d12 |>
-                dplyr::group_by(plate_id, animal) |>
-                dplyr::filter(n() == 2) |>
-                dplyr::summarise(
-                  val1 = mean_val[condition_grouped == c1],
-                  val2 = mean_val[condition_grouped == c2],
-                  pct_change = ((val2 - val1) / pmax(val1, 1e-6)) * 100,
-                  .groups = "drop"
-                ) |>
-                dplyr::mutate(comparison = paste0(c1, "_vs_", c2), phase = unique(d$phase))
-            })
-          }) |>
-          dplyr::ungroup()
+        group_col   <- NULL
+        group_order <- NULL
       }
-    }
 
-    output$delta_percentage_table <- DT::renderDataTable({
-      shiny::req(input$delta_table_var, rv$all_zone_combined_delta_boxplots[[input$delta_table_var]])
-      df <- rv$all_zone_combined_delta_boxplots[[input$delta_table_var]]
-      tab <- compute_delta_percentages(df, input$delta_table_var)
-      if (is.null(tab)) {
-        DT::datatable(data.frame(Message = "Not enough data for percentage calculations."), options = list(dom = "t"))
+      conds <- sort(unique(as.character(df$condition_grouped)))
+      conds <- conds[!is.na(conds) & nzchar(conds)]
+      if (length(conds) < 2) return(NULL)
+
+      pairs <- utils::combn(conds, 2, simplify = FALSE)
+      zones <- sort(unique(df$zone))
+
+      if (!is.null(group_col) && group_col %in% names(df)) {
+        groups <- unique(as.character(df[[group_col]]))
+        groups <- groups[!is.na(groups)]
+        groups <- if (!is.null(group_order)) intersect(group_order, groups) else sort(groups)
       } else {
-        DT::datatable(tab, options = list(pageLength = 15, scrollX = TRUE))
+        groups <- NULL
       }
-    })
 
-    output$download_current_delta_table <- shiny::downloadHandler(
-      filename = function() {
-        sprintf("delta_pct_%s_%s_%s.xlsx", input$delta_table_type, input$delta_table_var, input$transition_select)
-      },
-      content = function(file) {
-        shiny::req(input$delta_table_var, rv$all_zone_combined_delta_boxplots[[input$delta_table_var]])
-        df <- rv$all_zone_combined_delta_boxplots[[input$delta_table_var]]
-        tab <- compute_delta_percentages(df, input$delta_table_var)
-        if (!is.null(tab)) openxlsx::write.xlsx(tab, file)
-      }
-    )
+      rows <- list()
 
-    output$download_all_delta_tables <- shiny::downloadHandler(
-      filename = function() sprintf("all_delta_tables_%s.zip", format(Sys.time(), "%Y%m%d_%H%M%S")),
-      content = function(file) {
-        shiny::req(rv$all_zone_combined_delta_boxplots, input$transition_select)
-        tmp <- tempdir()
-        files <- c()
-        for (v in names(rv$all_zone_combined_delta_boxplots)) {
-          df <- rv$all_zone_combined_delta_boxplots[[v]]
-          tab <- compute_delta_percentages(df, v)
-          if (!is.null(tab)) {
-            fn <- file.path(tmp, sprintf("delta_pct_%s_%s_%s.xlsx", input$delta_table_type, v, input$transition_select))
-            openxlsx::write.xlsx(tab, fn)
-            files <- c(files, fn)
+      for (g in (if (!is.null(groups)) groups else "all")) {
+        for (z in zones) {
+          sub <- if (!is.null(group_col) && !is.null(groups)) {
+            df[df[[group_col]] == g & df$zone == z, , drop = FALSE]
+          } else {
+            df[df$zone == z, , drop = FALSE]
+          }
+
+          for (pair in pairs) {
+            cA <- pair[1]; cB <- pair[2]
+
+            vA <- as.numeric(sub[sub$condition_grouped == cA, val_col, drop = TRUE])
+            vB <- as.numeric(sub[sub$condition_grouped == cB, val_col, drop = TRUE])
+            vA <- vA[is.finite(vA)]; vB <- vB[is.finite(vB)]
+            if (!length(vA) || !length(vB)) next
+
+            mA <- mean(vA); mB <- mean(vB)
+            medA <- stats::median(vA); medB <- stats::median(vB)
+
+            pct_mean   <- if (abs(mA)   > 1e-9) round((mB   - mA)   / abs(mA)   * 100, 2) else NA_real_
+            pct_median <- if (abs(medA) > 1e-9) round((medB - medA) / abs(medA) * 100, 2) else NA_real_
+
+            row <- data.frame(
+              zone            = z,
+              comparison      = paste0(cA, " vs ", cB),
+              n_A             = length(vA),
+              n_B             = length(vB),
+              mean_A          = round(mA,   4),
+              mean_B          = round(mB,   4),
+              pct_diff_mean   = pct_mean,
+              median_A        = round(medA, 4),
+              median_B        = round(medB, 4),
+              pct_diff_median = pct_median,
+              stringsAsFactors = FALSE
+            )
+
+            if (!is.null(group_col) && !is.null(groups)) {
+              grp_label <- if (plot_type == "boxplot_delta") "phase" else "period"
+              row[[grp_label]] <- g
+              col_order <- c(grp_label, "zone", "comparison", "n_A", "n_B",
+                             "mean_A", "mean_B", "pct_diff_mean",
+                             "median_A", "median_B", "pct_diff_median")
+              row <- row[, col_order, drop = FALSE]
+            }
+
+            rows[[length(rows) + 1]] <- row
           }
         }
-        if (length(files)) zip::zip(file, files, mode = "cherry-pick")
-      },
-      contentType = "application/zip"
-    )
+      }
 
-    shiny::observeEvent(input$generate_delta_tables, {
-      shiny::req(rv$all_zone_combined_delta_boxplots, input$delta_table_var)
-      log("Delta percentage tables ready for viewing/download.")
+      if (!length(rows)) return(NULL)
+      dplyr::bind_rows(rows)
+    }
+
+    shiny::observeEvent(input$generate_percentage, {
+      tryCatch({
+        pt <- isolate(input$plot_type)
+
+        df_list <- switch(
+          pt,
+          "boxplot_periods"  = rv$all_zone_combined_light_dark_boxplots,
+          "boxplot_cumulate" = rv$all_zone_combined_cum_boxplots,
+          "boxplot_delta"    = rv$all_zone_combined_delta_boxplots,
+          NULL
+        )
+
+        if (is.null(df_list)) {
+          log("❌ Generate the datasets first before computing percentages.")
+          return()
+        }
+
+        transition <- if (pt == "boxplot_delta") isolate(input$transition_select) else NULL
+
+        log("⏳ Computing percentage tables...")
+
+        tbl_list <- stats::setNames(
+          lapply(names(df_list), function(v) {
+            tryCatch(
+              compute_percentage_table(df_list[[v]], pt, transition),
+              error = function(e) NULL
+            )
+          }),
+          names(df_list)
+        )
+
+        rv$percentage_tables_list     <- tbl_list
+        rv$percentage_tables_plot_type <- pt
+
+        shiny::updateTabsetPanel(session, "output_tabs", selected = "percentage_tables")
+        log("✅ Percentage tables computed.")
+      }, error = function(e) {
+        log(paste("❌ Percentage table computation failed:", e$message))
+      })
+    }, ignoreInit = TRUE)
+
+    output$percentage_table <- DT::renderDataTable({
+      shiny::req(input$pct_table_var)
+      tbl <- rv$percentage_tables_list[[input$pct_table_var]]
+      if (is.null(tbl)) {
+        return(DT::datatable(
+          data.frame(Message = "Click 'Generate Percentage' to compute the table."),
+          options = list(dom = "t")
+        ))
+      }
+      pct_cols <- intersect(c("pct_diff_mean", "pct_diff_median"), names(tbl))
+      dt <- DT::datatable(tbl, options = list(pageLength = 25, scrollX = TRUE))
+      if (length(pct_cols)) {
+        dt <- dt |>
+          DT::formatStyle(
+            pct_cols,
+            backgroundColor = DT::styleInterval(0, c("#ffb3b3", "#b3ffb3"))
+          )
+      }
+      dt
     })
+
+    output$download_percentage_table <- shiny::downloadHandler(
+      filename = function() {
+        pt  <- rv$percentage_tables_plot_type %||% "unknown"
+        var <- input$pct_table_var
+        sprintf("percentage_%s_%s.xlsx", pt, var)
+      },
+      content = function(file) {
+        shiny::req(input$pct_table_var)
+        tbl <- rv$percentage_tables_list[[input$pct_table_var]]
+        if (!is.null(tbl)) openxlsx::write.xlsx(tbl, file)
+      }
+    )
 
     shiny::observeEvent(rv$all_zone_combined_light_dark_boxplots, {
       if (is.null(input$selected_zone) || input$selected_zone == "") {
@@ -2610,6 +2361,1096 @@ visualization_module_server <- function(id, rv, config) {
         if (length(zones)) shiny::updateSelectInput(session, "selected_zone", selected = as.character(zones[1]))
       }
     }, ignoreNULL = TRUE)
+
+    # ==================================================================
+    # Figure info modal
+    # ==================================================================
+    shiny::observeEvent(input$figure_info, {
+      pt <- isolate(input$plot_type)
+
+      content <- switch(
+        pt,
+
+        "boxplot_periods" = shiny::tagList(
+          shiny::h4("Period Boxplot — how points are computed"),
+          shiny::p(
+            shiny::strong("Each point = one animal"), " averaged across all time codes belonging to that period."
+          ),
+          shiny::tags$ol(
+            shiny::tags$li("All raw measurements for an animal within a period are extracted from the XLSX file."),
+            shiny::tags$li("These measurements are averaged to produce one value per animal per period."),
+            shiny::tags$li("This mean is the plotted point.")
+          ),
+          shiny::p(
+            shiny::strong("Period definition:"), " periods are defined by the transition file (columns ",
+            shiny::code("start"), " and ", shiny::code("transition"), "), e.g. light1, dark1, light2 …"
+          ),
+          shiny::p(
+            shiny::strong("'Keep only period indices' filter:"), " if you enter ", shiny::code("1"),
+            " or ", shiny::code("1,2"), ", only the 1st (or 1st and 2nd) repetition of each period label is retained."
+          ),
+          shiny::p(
+            shiny::strong("Boxplot:"), " the box shows the interquartile range (Q1–Q3), the horizontal bar is the median,",
+            " and whiskers extend to 1.5 × IQR. Points beyond whiskers are plotted individually."
+          )
+        ),
+
+        "boxplot_cumulate" = shiny::tagList(
+          shiny::h4("Cumulative Boxplot — how points are computed"),
+          shiny::p(
+            shiny::strong("Each point = one animal's total activity"), " across the entire analysed recording."
+          ),
+          shiny::tags$ol(
+            shiny::tags$li("All retained measurements for an animal are extracted (after any removal of wells, conditions, periods, or time codes)."),
+            shiny::tags$li("These measurements are summed to produce one cumulative total per animal."),
+            shiny::tags$li("This total is the plotted point.")
+          ),
+          shiny::p(
+            shiny::strong("Use:"), " useful for comparing the overall activity level between conditions over the whole recording,",
+            " independently of temporal dynamics."
+          ),
+          shiny::p(
+            shiny::strong("Boxplot:"), " same representation as the period boxplot (IQR, median, 1.5 × IQR whiskers)."
+          )
+        ),
+
+        "boxplot_delta" = shiny::tagList(
+          shiny::h4("Delta Boxplot — how points are computed"),
+          shiny::p(
+            shiny::strong("Each point = one animal averaged within a phase window"), " around a stimulus transition."
+          ),
+          shiny::p(shiny::strong("Three consecutive windows of equal length Δ are defined:")),
+          shiny::tags$ul(
+            shiny::tags$li(shiny::strong("Before [t − Δ, t):"), " the window immediately before the transition — baseline response."),
+            shiny::tags$li(shiny::strong("Switch [t, t + Δ):"), " the window starting at the transition — immediate response to the stimulus."),
+            shiny::tags$li(shiny::strong("After [t + Δ, t + 2Δ):"), " the window following the switch — sustained or rebound response.")
+          ),
+          shiny::p(
+            shiny::strong("t"), " is the transition time taken from the period boundary file, determined per plate independently.",
+            " Δ is the value set with the Delta Time Window slider."
+          ),
+          shiny::p(
+            shiny::strong("Per-animal value:"), " within each phase window, all measurements for a given animal are averaged.",
+            " This mean is the plotted point."
+          ),
+          shiny::p(
+            shiny::strong("'Separated' mode:"), " one panel per phase.",
+            shiny::strong(" 'Pooled' mode:"), " all three phases side-by-side within each condition, coloured by phase."
+          ),
+          shiny::p(
+            shiny::strong("The live preview (Delta Time Explorer)"), " below the main figure shows the raw temporal trajectory",
+            " to help you choose an appropriate Δ."
+          )
+        ),
+
+        "lineplot" = shiny::tagList(
+          shiny::h4("Lineplot — how lines and error bands are computed"),
+          shiny::p(
+            shiny::strong("Each line = the mean per-animal response within each time bin"), " for a given condition."
+          ),
+          shiny::tags$ol(
+            shiny::tags$li("Data are divided into non-overlapping time bins of the chosen aggregation width (e.g. 60 s)."),
+            shiny::tags$li("Within each bin, the selected metric is summed per animal."),
+            shiny::tags$li("The displayed y-value is the mean of these per-animal sums across all animals in the condition.")
+          ),
+          shiny::p(shiny::strong("Error representation:")),
+          shiny::tags$ul(
+            shiny::tags$li(shiny::strong("Error bars:"), " ± 1 standard error of the mean (SE = SD / √n)."),
+            shiny::tags$li(shiny::strong("95% CI ribbon:"), " ± 1.96 × SE, shown as a shaded band.")
+          ),
+          shiny::p(
+            shiny::strong("Time axis:"), " displayed in the selected time unit.",
+            " If 'Convert Time Unit?' is set to Yes, the raw ", shiny::code("start"), " column (in seconds)",
+            " is converted before binning — the aggregation period is then interpreted in the target unit."
+          )
+        ),
+
+        shiny::p("Select a plot type to see its description.")
+      )
+
+      shiny::showModal(shiny::modalDialog(
+        title = shiny::tagList(shiny::icon("circle-info"), " How this figure is computed"),
+        content,
+        easyClose = TRUE,
+        size = "l",
+        footer = shiny::modalButton("Close")
+      ))
+    }, ignoreInit = TRUE)
+
+    # ==================================================================
+    # Percentage info modal
+    # ==================================================================
+    shiny::observeEvent(input$percentage_info, {
+      pt <- isolate(input$plot_type)
+
+      content <- switch(
+        pt,
+
+        "boxplot_periods" = shiny::tagList(
+          shiny::h4("Percentage differences — Period Boxplot"),
+          shiny::p(
+            "For each period, zone, and pair of conditions, two centrality measures are compared."
+          ),
+          shiny::tags$ul(
+            shiny::tags$li(
+              shiny::strong("Mean-based:"), " the mean of all per-animal values is computed per condition.",
+              " Percentage difference = (mean_B − mean_A) / |mean_A| × 100."
+            ),
+            shiny::tags$li(
+              shiny::strong("Median-based:"), " the median of all per-animal values is computed per condition.",
+              " Percentage difference = (median_B − median_A) / |median_A| × 100."
+            )
+          ),
+          shiny::p(
+            "A = first condition in the pair (reference); B = second condition (comparator).",
+            " A positive value means B > A."
+          ),
+          shiny::p(
+            shiny::strong("Cell colours:"),
+            " green = positive difference, red = negative difference."
+          ),
+          shiny::p(
+            shiny::strong("Note:"), " clicking 'Generate Percentage' again after changing the",
+            " 'Keep only period indices' filter will update the table with the new period selection."
+          )
+        ),
+
+        "boxplot_cumulate" = shiny::tagList(
+          shiny::h4("Percentage differences — Cumulative Boxplot"),
+          shiny::p(
+            "For each zone and pair of conditions, two centrality measures of the cumulative activity are compared."
+          ),
+          shiny::tags$ul(
+            shiny::tags$li(
+              shiny::strong("Mean-based:"), " mean cumulative value across all animals per condition.",
+              " Percentage difference = (mean_B − mean_A) / |mean_A| × 100."
+            ),
+            shiny::tags$li(
+              shiny::strong("Median-based:"), " median cumulative value across all animals per condition.",
+              " Percentage difference = (median_B − median_A) / |median_A| × 100."
+            )
+          ),
+          shiny::p(
+            "A = first condition in the pair (reference); B = second condition (comparator).",
+            " A positive value means B > A."
+          ),
+          shiny::p(
+            shiny::strong("Cell colours:"),
+            " green = positive difference, red = negative difference."
+          )
+        ),
+
+        "boxplot_delta" = shiny::tagList(
+          shiny::h4("Percentage differences — Delta Boxplot"),
+          shiny::p(
+            "For each Momentum (Before, Switch, After), zone, and pair of conditions,",
+            " two centrality measures are compared."
+          ),
+          shiny::tags$ul(
+            shiny::tags$li(
+              shiny::strong("Mean-based:"), " mean per-animal value within that phase window per condition.",
+              " Percentage difference = (mean_B − mean_A) / |mean_A| × 100."
+            ),
+            shiny::tags$li(
+              shiny::strong("Median-based:"), " median per-animal value within that phase window per condition.",
+              " Percentage difference = (median_B − median_A) / |median_A| × 100."
+            )
+          ),
+          shiny::p(
+            "A = first condition in the pair (reference); B = second condition (comparator).",
+            " A positive value means B > A."
+          ),
+          shiny::p(
+            shiny::strong("Cell colours:"),
+            " green = positive difference, red = negative difference."
+          ),
+          shiny::p(
+            "Each Momentum is treated independently, allowing you to detect differential",
+            " effects of the stimulus across the Before, Switch and After time windows."
+          )
+        ),
+
+        shiny::p("Select a compatible plot type (Periods, Cumulate, or Delta) to see the description.")
+      )
+
+      shiny::showModal(shiny::modalDialog(
+        title = shiny::tagList(shiny::icon("circle-info"), " Percentage calculation method"),
+        content,
+        easyClose = TRUE,
+        size = "l",
+        footer = shiny::modalButton("Close")
+      ))
+    }, ignoreInit = TRUE)
+
+    # ==================================================================
+    # Statistical helpers (no Shiny dependency)
+    # ==================================================================
+
+    get_statistics_dataset <- function(df_list, response_var) {
+      if (is.null(df_list) || is.null(response_var) || !nzchar(response_var)) return(NULL)
+      df_list[[response_var]]
+    }
+
+    check_normality <- function(df, value_col, group_col) {
+      if (is.null(df) || !nrow(df)) return(NULL)
+      if (!value_col %in% names(df) || !group_col %in% names(df)) return(NULL)
+
+      formula_obj <- as.formula(paste(value_col, "~", group_col))
+      model <- tryCatch(aov(formula_obj, data = df), error = function(e) NULL)
+      if (is.null(model)) return(NULL)
+
+      resids <- residuals(model)
+      if (length(resids) < 3) return(NULL)
+      if (length(resids) > 5000) resids <- sample(resids, 5000)
+
+      sw <- tryCatch(stats::shapiro.test(resids), error = function(e) NULL)
+      if (is.null(sw)) return(NULL)
+
+      is_normal <- sw$p.value > 0.05
+
+      tbl <- data.frame(
+        Test           = "Shapiro-Wilk",
+        W_statistic    = round(as.numeric(sw$statistic), 4),
+        p_value        = round(sw$p.value, 4),
+        Interpretation = if (is_normal)
+          "p > 0.05: residuals follow a normal distribution"
+        else
+          "p <= 0.05: residuals do NOT follow a normal distribution",
+        Decision       = if (is_normal) "Normality assumed" else "Normality not assumed",
+        stringsAsFactors = FALSE
+      )
+
+      list(table = tbl, residuals = resids, model = model, is_normal = is_normal)
+    }
+
+    check_homoscedasticity <- function(df, value_col, group_col, is_normal,
+                                        sample_type = "independent") {
+      if (sample_type == "paired") return(NULL)
+      if (is.null(df) || !nrow(df)) return(NULL)
+
+      n_conditions <- length(unique(df[[group_col]]))
+      formula_obj  <- as.formula(paste(value_col, "~", group_col))
+
+      if (n_conditions == 2 && sample_type == "independent") {
+        groups <- split(df[[value_col]], df[[group_col]])
+        result <- tryCatch(var.test(groups[[1]], groups[[2]]), error = function(e) NULL)
+        if (is.null(result)) return(NULL)
+        test_name <- "F-test for equality of variances (var.test)"
+        stat_val  <- round(as.numeric(result$statistic), 4)
+        df_str    <- paste(result$parameter, collapse = " / ")
+        p_val     <- round(result$p.value, 4)
+
+      } else if (is_normal) {
+        result <- tryCatch(stats::bartlett.test(formula_obj, data = df), error = function(e) NULL)
+        if (is.null(result)) return(NULL)
+        test_name <- "Bartlett test"
+        stat_val  <- round(as.numeric(result$statistic), 4)
+        df_str    <- as.character(result$parameter)
+        p_val     <- round(result$p.value, 4)
+
+      } else {
+        result <- tryCatch(
+          car::leveneTest(formula_obj, data = df, center = "median"),
+          error = function(e) NULL
+        )
+        if (is.null(result)) return(NULL)
+        test_name <- "Levene test (car, center = median)"
+        stat_val  <- round(result[["F value"]][1], 4)
+        df_str    <- paste(result[["Df"]][1], "/", result[["Df"]][2])
+        p_val     <- round(result[["Pr(>F)"]][1], 4)
+      }
+
+      is_homo <- p_val > 0.05
+
+      tbl <- data.frame(
+        Test            = test_name,
+        Statistic       = stat_val,
+        Df              = df_str,
+        p_value         = p_val,
+        Interpretation  = if (is_homo)
+          "p > 0.05: variances are equal between groups"
+        else
+          "p <= 0.05: at least one group has a different variance",
+        Decision        = if (is_homo) "Homoscedasticity assumed" else "Homoscedasticity not assumed",
+        stringsAsFactors = FALSE
+      )
+
+      list(table = tbl, is_homoscedastic = is_homo, test_used = test_name)
+    }
+
+    select_inferential_test <- function(df, value_col, group_col, is_normal,
+                                         is_homoscedastic, sample_type = "independent") {
+      if (is.null(df) || !nrow(df)) return(NULL)
+
+      formula_obj  <- as.formula(paste(value_col, "~", group_col))
+      n_conditions <- length(unique(df[[group_col]]))
+      groups       <- split(df[[value_col]], df[[group_col]])
+
+      if (n_conditions == 2) {
+        g1    <- groups[[1]]; g2 <- groups[[2]]
+        n_min <- min(length(g1), length(g2))
+
+        if (sample_type == "paired") {
+          if (!is_normal) {
+            result    <- tryCatch(stats::wilcox.test(g1, g2, paired = TRUE), error = function(e) NULL)
+            test_name <- "Wilcoxon signed-rank test (paired)"
+            reason    <- "Paired samples — normality not assumed"
+          } else if (n_min >= 30) {
+            result    <- tryCatch(stats::t.test(g1, g2, paired = TRUE), error = function(e) NULL)
+            test_name <- "Paired Z-test (t.test approximation, n >= 30)"
+            reason    <- "Paired samples — normality assumed, n >= 30"
+          } else {
+            result    <- tryCatch(stats::t.test(g1, g2, paired = TRUE), error = function(e) NULL)
+            test_name <- "Paired t-test"
+            reason    <- "Paired samples — normality assumed, n < 30"
+          }
+
+        } else {
+          if (!is_normal) {
+            result    <- tryCatch(stats::wilcox.test(g1, g2, paired = FALSE), error = function(e) NULL)
+            test_name <- "Wilcoxon-Mann-Whitney test"
+            reason    <- "Independent samples — normality not assumed"
+          } else if (!is_homoscedastic) {
+            result    <- tryCatch(stats::t.test(g1, g2, var.equal = FALSE), error = function(e) NULL)
+            test_name <- "Welch's t-test"
+            reason    <- "Independent samples — normality assumed, homoscedasticity not assumed"
+          } else if (n_min >= 30) {
+            result    <- tryCatch(stats::t.test(g1, g2, var.equal = TRUE), error = function(e) NULL)
+            test_name <- "Z-test (t.test approximation, n >= 30)"
+            reason    <- "Independent samples — normality assumed, homoscedasticity assumed, n >= 30"
+          } else {
+            result    <- tryCatch(stats::t.test(g1, g2, var.equal = TRUE), error = function(e) NULL)
+            test_name <- "Student's t-test"
+            reason    <- "Independent samples — normality assumed, homoscedasticity assumed, n < 30"
+          }
+        }
+
+        if (is.null(result)) return(NULL)
+        stat_val <- round(as.numeric(result$statistic), 4)
+        p_val    <- round(result$p.value, 4)
+
+      } else {
+        if (!is_normal || !is_homoscedastic) {
+          result    <- tryCatch(stats::kruskal.test(formula_obj, data = df), error = function(e) NULL)
+          test_name <- "Kruskal-Wallis test"
+          reason    <- if (!is_normal)
+            "More than 2 conditions — normality not assumed"
+          else
+            "More than 2 conditions — normality assumed but homoscedasticity not assumed"
+        } else {
+          fit       <- tryCatch(aov(formula_obj, data = df), error = function(e) NULL)
+          if (is.null(fit)) return(NULL)
+          result    <- tryCatch(summary(fit), error = function(e) NULL)
+          test_name <- "One-way ANOVA"
+          reason    <- "More than 2 conditions — normality and homoscedasticity assumed"
+          attr(result, "aov_model") <- fit
+        }
+
+        if (is.null(result)) return(NULL)
+        if (test_name == "One-way ANOVA") {
+          stat_val <- round(result[[1]][["F value"]][1], 4)
+          p_val    <- round(result[[1]][["Pr(>F)"]][1], 4)
+        } else {
+          stat_val <- round(as.numeric(result$statistic), 4)
+          p_val    <- round(result$p.value, 4)
+        }
+      }
+
+      is_significant <- p_val < 0.05
+
+      tbl <- data.frame(
+        Test           = test_name,
+        Reason         = reason,
+        Statistic      = stat_val,
+        p_value        = p_val,
+        Interpretation = if (is_significant)
+          "p < 0.05: at least one group differs from the others"
+        else
+          "p >= 0.05: no significant difference between groups",
+        Decision       = if (is_significant) "H0 rejected" else "H0 not rejected",
+        stringsAsFactors = FALSE
+      )
+
+      list(table = tbl, test_name = test_name, reason = reason,
+           p_value = p_val, statistic = stat_val,
+           is_significant = is_significant, result_obj = result)
+    }
+
+    run_posthoc_tests <- function(df, value_col, group_col, test_name,
+                                   comparison_type, control_condition = NULL) {
+      if (is.null(df) || !nrow(df)) return(NULL)
+
+      df[[group_col]] <- factor(df[[group_col]])
+      formula_obj     <- as.formula(paste(value_col, "~", group_col))
+      n_per_group     <- as.integer(table(df[[group_col]]))
+      is_balanced     <- length(unique(n_per_group)) == 1
+
+      if (grepl("ANOVA", test_name, ignore.case = TRUE)) {
+        if (comparison_type == "vs_control" &&
+            !is.null(control_condition) && nzchar(control_condition)) {
+          df[[group_col]] <- relevel(df[[group_col]], ref = control_condition)
+          model <- tryCatch(aov(formula_obj, data = df), error = function(e) NULL)
+          if (is.null(model)) return(NULL)
+
+          mcp_spec      <- setNames(list("Dunnett"), group_col)
+          contrasts_obj <- tryCatch(
+            multcomp::glht(model, linfct = do.call(multcomp::mcp, mcp_spec)),
+            error = function(e) NULL
+          )
+
+          if (!is.null(contrasts_obj)) {
+            s   <- summary(contrasts_obj)
+            tbl <- data.frame(
+              Comparison  = names(s$test$coefficients),
+              Estimate    = round(s$test$coefficients, 4),
+              Std_Error   = round(s$test$sigma, 4),
+              z_value     = round(s$test$tstat, 4),
+              adj_p_value = round(s$test$pvalues, 4),
+              Significant = s$test$pvalues < 0.05,
+              stringsAsFactors = FALSE
+            )
+            return(list(table = tbl, method = "Dunnett test (multcomp)", is_balanced = is_balanced))
+          }
+
+          # Fallback: Bonferroni filtered to control comparisons
+          model2 <- tryCatch(aov(formula_obj, data = df), error = function(e) NULL)
+          if (is.null(model2)) return(NULL)
+          pw  <- tryCatch(TukeyHSD(model2), error = function(e) NULL)
+          if (is.null(pw)) return(NULL)
+          raw <- as.data.frame(pw[[1]])
+          raw$comparison <- rownames(raw)
+          raw <- raw[grepl(control_condition, raw$comparison, fixed = TRUE), ]
+          adj <- p.adjust(raw[["p adj"]], method = "bonferroni")
+          tbl <- data.frame(
+            Comparison  = raw$comparison,
+            Estimate    = round(raw$diff, 4),
+            adj_p_value = round(adj, 4),
+            Significant = adj < 0.05,
+            stringsAsFactors = FALSE
+          )
+          return(list(table = tbl,
+                      method = "Bonferroni pairwise (Dunnett fallback, control comparisons)",
+                      is_balanced = is_balanced))
+
+        } else {
+          model <- tryCatch(aov(formula_obj, data = df), error = function(e) NULL)
+          if (is.null(model)) return(NULL)
+
+          if (is_balanced) {
+            tukey <- tryCatch(TukeyHSD(model), error = function(e) NULL)
+            if (is.null(tukey)) return(NULL)
+            raw <- as.data.frame(tukey[[1]])
+            tbl <- data.frame(
+              Comparison  = rownames(raw),
+              Estimate    = round(raw$diff, 4),
+              Lower_CI    = round(raw$lwr, 4),
+              Upper_CI    = round(raw$upr, 4),
+              adj_p_value = round(raw[["p adj"]], 4),
+              Significant = raw[["p adj"]] < 0.05,
+              stringsAsFactors = FALSE
+            )
+            return(list(table = tbl, method = "Tukey HSD (balanced design)", is_balanced = TRUE))
+          } else {
+            result <- tryCatch(
+              stats::pairwise.t.test(df[[value_col]], df[[group_col]],
+                                     p.adjust.method = "bonferroni"),
+              error = function(e) NULL
+            )
+            if (is.null(result)) return(NULL)
+            p_mat <- result$p.value
+            idx   <- which(!is.na(p_mat), arr.ind = TRUE)
+            tbl <- data.frame(
+              Comparison  = paste(rownames(p_mat)[idx[, 1]], "vs", colnames(p_mat)[idx[, 2]]),
+              adj_p_value = round(p_mat[idx], 4),
+              Significant = p_mat[idx] < 0.05,
+              stringsAsFactors = FALSE
+            )
+            return(list(table = tbl,
+                        method = "Bonferroni pairwise t-test (unbalanced design)",
+                        is_balanced = FALSE))
+          }
+        }
+
+      } else if (grepl("Kruskal", test_name, ignore.case = TRUE)) {
+        result <- tryCatch(
+          rstatix::dunn_test(df, formula_obj, p.adjust.method = "bonferroni"),
+          error = function(e) NULL
+        )
+        if (is.null(result)) return(NULL)
+
+        tbl <- data.frame(
+          Comparison  = paste(result$group1, "vs", result$group2),
+          Statistic   = round(result$statistic, 4),
+          adj_p_value = round(result$p.adj, 4),
+          Significant = result$p.adj < 0.05,
+          stringsAsFactors = FALSE
+        )
+
+        if (comparison_type == "vs_control" &&
+            !is.null(control_condition) && nzchar(control_condition)) {
+          tbl <- tbl[grepl(control_condition, tbl$Comparison, fixed = TRUE), , drop = FALSE]
+        }
+
+        return(list(table = tbl,
+                    method = "Dunn test with Bonferroni correction (rstatix)",
+                    is_balanced = is_balanced))
+      }
+
+      NULL
+    }
+
+    # ==================================================================
+    # Statistical diagnostic plots (no Shiny dependency)
+    # ==================================================================
+
+    plot_residual_qq <- function(residuals, theme_fn = light_theme, sub_df = NULL) {
+      rank_order <- order(residuals)
+      df_qq <- data.frame(
+        resid       = residuals[rank_order],
+        theoretical = stats::qnorm(stats::ppoints(length(residuals)))
+      )
+      if (!is.null(sub_df) && nrow(sub_df) == length(residuals)) {
+        df_qq$condition <- as.character(sub_df$condition_grouped)[rank_order]
+        df_qq$animal    <- as.character(sub_df$animal)[rank_order]
+        df_qq$plate     <- as.character(sub_df$plate_id)[rank_order]
+        df_qq$tooltip   <- paste0(
+          "Condition: ", df_qq$condition,
+          "<br>Animal: ", df_qq$animal,
+          "<br>Plate: ", df_qq$plate,
+          "<br>Residual: ", sprintf("%.4f", df_qq$resid)
+        )
+      } else {
+        df_qq$tooltip <- paste0("Residual: ", sprintf("%.4f", df_qq$resid))
+      }
+      df_qq$.id <- paste0("qq_", seq_len(nrow(df_qq)))
+
+      ggplot2::ggplot(df_qq, ggplot2::aes(x = theoretical, y = resid)) +
+        ggplot2::stat_qq_line(ggplot2::aes(sample = resid),
+                              colour = "red", linewidth = 0.8, linetype = "dashed") +
+        ggiraph::geom_point_interactive(
+          ggplot2::aes(tooltip = tooltip, data_id = .id),
+          colour = "#339989", alpha = 0.7, size = 2,
+          hover_css = "r:5!important;opacity:1!important;"
+        ) +
+        ggplot2::labs(
+          title = "QQ-Plot of Residuals",
+          x     = "Theoretical Quantiles",
+          y     = "Sample Quantiles"
+        ) +
+        theme_fn()
+    }
+
+    plot_residuals_vs_fitted <- function(model, theme_fn = light_theme, sub_df = NULL) {
+      df_diag <- data.frame(
+        fitted = fitted(model),
+        resid  = residuals(model)
+      )
+      if (!is.null(sub_df) && nrow(sub_df) == nrow(df_diag)) {
+        df_diag$condition <- as.character(sub_df$condition_grouped)
+        df_diag$animal    <- as.character(sub_df$animal)
+        df_diag$plate     <- as.character(sub_df$plate_id)
+        df_diag$tooltip   <- paste0(
+          "Condition: ", df_diag$condition,
+          "<br>Animal: ", df_diag$animal,
+          "<br>Plate: ", df_diag$plate,
+          "<br>Fitted: ", sprintf("%.4f", df_diag$fitted),
+          "<br>Residual: ", sprintf("%.4f", df_diag$resid)
+        )
+      } else {
+        df_diag$tooltip <- paste0(
+          "Fitted: ", sprintf("%.4f", df_diag$fitted),
+          "<br>Residual: ", sprintf("%.4f", df_diag$resid)
+        )
+      }
+      df_diag$.id <- paste0("fit_", seq_len(nrow(df_diag)))
+
+      ggplot2::ggplot(df_diag, ggplot2::aes(x = fitted, y = resid)) +
+        ggplot2::geom_hline(yintercept = 0, linetype = "dashed",
+                            colour = "red", linewidth = 0.8) +
+        ggplot2::geom_smooth(method = "loess", se = FALSE, colour = "steelblue",
+                             linewidth = 0.7, formula = y ~ x) +
+        ggiraph::geom_point_interactive(
+          ggplot2::aes(tooltip = tooltip, data_id = .id),
+          colour = "#339989", alpha = 0.7, size = 2,
+          hover_css = "r:5!important;opacity:1!important;"
+        ) +
+        ggplot2::labs(
+          title = "Residuals vs Fitted",
+          x     = "Fitted Values",
+          y     = "Residuals"
+        ) +
+        theme_fn()
+    }
+
+    plot_residuals_vs_leverage <- function(model, theme_fn = light_theme, sub_df = NULL) {
+      h     <- hatvalues(model)
+      r_std <- tryCatch(rstandard(model), error = function(e) residuals(model))
+      cooks <- tryCatch(cooks.distance(model),
+                        error = function(e) rep(NA_real_, length(h)))
+
+      df_lev <- data.frame(leverage = h, std_resid = r_std, cooks_dist = cooks)
+      if (!is.null(sub_df) && nrow(sub_df) == nrow(df_lev)) {
+        df_lev$condition <- as.character(sub_df$condition_grouped)
+        df_lev$animal    <- as.character(sub_df$animal)
+        df_lev$plate     <- as.character(sub_df$plate_id)
+      }
+      df_lev <- df_lev[is.finite(df_lev$leverage) & is.finite(df_lev$std_resid), ]
+      if (!nrow(df_lev)) return(NULL)
+
+      has_meta <- all(c("condition", "animal", "plate") %in% names(df_lev))
+      df_lev$tooltip <- if (has_meta) {
+        paste0(
+          "Condition: ", df_lev$condition,
+          "<br>Animal: ", df_lev$animal,
+          "<br>Plate: ", df_lev$plate,
+          "<br>Leverage: ", sprintf("%.4f", df_lev$leverage),
+          "<br>Std. Residual: ", sprintf("%.4f", df_lev$std_resid),
+          "<br>Cook's dist.: ", ifelse(is.finite(df_lev$cooks_dist),
+                                       sprintf("%.4f", df_lev$cooks_dist), "NA")
+        )
+      } else {
+        paste0(
+          "Leverage: ", sprintf("%.4f", df_lev$leverage),
+          "<br>Std. Residual: ", sprintf("%.4f", df_lev$std_resid),
+          "<br>Cook's dist.: ", ifelse(is.finite(df_lev$cooks_dist),
+                                       sprintf("%.4f", df_lev$cooks_dist), "NA")
+        )
+      }
+      df_lev$.id <- paste0("lev_", seq_len(nrow(df_lev)))
+
+      ggplot2::ggplot(df_lev, ggplot2::aes(x = leverage, y = std_resid)) +
+        ggplot2::geom_hline(yintercept = 0, linetype = "dashed",
+                            colour = "red", linewidth = 0.8) +
+        ggiraph::geom_point_interactive(
+          ggplot2::aes(size = cooks_dist, tooltip = tooltip, data_id = .id),
+          colour = "#339989", alpha = 0.7,
+          hover_css = "opacity:1!important;"
+        ) +
+        ggplot2::scale_size_continuous(name = "Cook's distance", range = c(1, 8)) +
+        ggplot2::labs(
+          title = "Residuals vs Leverage",
+          x     = "Leverage",
+          y     = "Standardised Residuals"
+        ) +
+        theme_fn()
+    }
+
+    plot_boxplot_by_condition <- function(df, value_col, group_col,
+                                           theme_fn = light_theme) {
+      if (is.null(df) || !nrow(df)) return(NULL)
+      if (!value_col %in% names(df) || !group_col %in% names(df)) return(NULL)
+
+      has_animal <- "animal"   %in% names(df)
+      has_plate  <- "plate_id" %in% names(df)
+      df$.id <- paste0("bx_", seq_len(nrow(df)))
+      df$tooltip <- paste0(
+        "Condition: ", as.character(df[[group_col]]),
+        if (has_animal) paste0("<br>Animal: ", as.character(df$animal))   else "",
+        if (has_plate)  paste0("<br>Plate: ",  as.character(df$plate_id)) else "",
+        "<br>Value: ", sprintf("%.4f", as.numeric(df[[value_col]]))
+      )
+
+      ggplot2::ggplot(df,
+        ggplot2::aes(x = .data[[group_col]], y = .data[[value_col]],
+                     fill = .data[[group_col]])) +
+        ggplot2::geom_boxplot(width = 0.6, outlier.shape = NA, alpha = 0.8) +
+        ggiraph::geom_point_interactive(
+          ggplot2::aes(tooltip = tooltip, data_id = .id),
+          position = ggplot2::position_jitter(width = 0.15, seed = 42),
+          alpha = 0.6, size = 1.8, colour = "grey30",
+          hover_css = "r:5!important;opacity:1!important;"
+        ) +
+        ggplot2::labs(
+          title = paste("Distribution of", value_col, "by condition"),
+          x     = NULL,
+          y     = value_col
+        ) +
+        theme_fn() +
+        ggplot2::theme(
+          axis.text.x     = ggplot2::element_text(angle = 45, hjust = 1),
+          legend.position = "none"
+        )
+    }
+
+    # ==================================================================
+    # Statistics: UI population + main observer + output renderers
+    # ==================================================================
+
+    shiny::observe({
+      pt   <- input$stat_plot_type
+      rvar <- input$stat_response_var
+      if (is.null(pt) || is.null(rvar) || !nzchar(rvar)) return()
+
+      df_list <- switch(pt,
+        "boxplot_periods"  = rv$all_zone_combined_light_dark_boxplots,
+        "boxplot_cumulate" = rv$all_zone_combined_cum_boxplots,
+        "boxplot_delta"    = rv$all_zone_combined_delta_boxplots,
+        "lineplot"         = rv$all_zone_combined_lineplots,
+        NULL
+      )
+      df <- get_statistics_dataset(df_list, rvar)
+      if (is.null(df) || !nrow(df)) return()
+
+      zones <- as.character(sort(unique(df$zone)))
+      conds <- sort(unique(as.character(
+        df$condition_grouped[!is.na(df$condition_grouped) & nzchar(df$condition_grouped)]
+      )))
+
+      cur_zone <- isolate(input$stat_zone)
+      shiny::updateSelectInput(session, "stat_zone",
+        choices  = zones,
+        selected = if (!is.null(cur_zone) && cur_zone %in% zones) cur_zone else zones[1]
+      )
+      cur_ctrl <- isolate(input$stat_control_condition)
+      shiny::updateSelectInput(session, "stat_control_condition",
+        choices  = conds,
+        selected = if (!is.null(cur_ctrl) && cur_ctrl %in% conds) cur_ctrl else conds[1]
+      )
+    })
+
+    shiny::observeEvent(input$run_statistics, {
+      tryCatch({
+        pt        <- isolate(input$stat_plot_type)
+        rvar      <- isolate(input$stat_response_var)
+        zone_sel  <- isolate(input$stat_zone)
+        comp_type <- isolate(input$stat_comparison_type)
+        ctrl_cond <- if (identical(comp_type, "vs_control"))
+                       isolate(input$stat_control_condition) else NULL
+        samp_type <- isolate(input$stat_sample_type)
+        theme_fn  <- if (tolower(isolate(input$theme_switch)) == "light")
+                       light_theme else dark_theme
+
+        if (is.null(rvar) || !nzchar(rvar)) {
+          log("❌ Statistics: select a response variable first.")
+          return()
+        }
+
+        df_list <- switch(pt,
+          "boxplot_periods"  = rv$all_zone_combined_light_dark_boxplots,
+          "boxplot_cumulate" = rv$all_zone_combined_cum_boxplots,
+          "boxplot_delta"    = rv$all_zone_combined_delta_boxplots,
+          "lineplot"         = rv$all_zone_combined_lineplots,
+          NULL
+        )
+
+        df <- get_statistics_dataset(df_list, rvar)
+        if (is.null(df) || !nrow(df)) {
+          log("❌ Statistics: no dataset found. Generate datasets first.")
+          return()
+        }
+
+        if (!is.null(zone_sel) && nzchar(zone_sel))
+          df <- df[!is.na(df$zone) & as.character(df$zone) == zone_sel, , drop = FALSE]
+
+        value_col <- switch(pt,
+          "boxplot_periods"  = "mean_val",
+          "boxplot_cumulate" = "cum",
+          "boxplot_delta"    = "mean_val",
+          "lineplot"         = "var_value_per_well",
+          NULL
+        )
+
+        if (is.null(value_col) || !value_col %in% names(df)) {
+          log("❌ Statistics: expected value column not found in dataset.")
+          return()
+        }
+
+        group_col <- "condition_grouped"
+
+        if (pt == "lineplot") {
+          df <- as.data.frame(
+            dplyr::summarise(
+              dplyr::group_by(df, animal, condition_grouped, zone, plate_id),
+              var_value_per_well = sum(var_value_per_well, na.rm = TRUE),
+              .groups = "drop"
+            )
+          )
+        }
+
+        if (pt == "boxplot_periods" && "period_without_numbers" %in% names(df)) {
+          sub_groups   <- sort(unique(as.character(df$period_without_numbers)))
+          group_within <- "period_without_numbers"
+        } else if (pt == "boxplot_delta" && "transition_phase" %in% names(df)) {
+          df$stats_phase <- dplyr::recode(
+            sub(".*_", "", df$transition_phase),
+            before = "Before", switch = "Switch", after = "After",
+            .default = NA_character_
+          )
+          df           <- df[!is.na(df$stats_phase), , drop = FALSE]
+          sub_groups   <- intersect(c("Before", "Switch", "After"),
+                                     unique(df$stats_phase))
+          group_within <- "stats_phase"
+        } else {
+          sub_groups   <- "all"
+          group_within <- NULL
+        }
+
+        log("⏳ Running statistics...")
+
+        results_list <- stats::setNames(
+          lapply(sub_groups, function(grp) {
+            sub_df <- if (grp == "all" || is.null(group_within)) df else
+              df[!is.na(df[[group_within]]) & df[[group_within]] == grp, , drop = FALSE]
+
+            sub_df <- sub_df[
+              !is.na(sub_df[[value_col]]) &
+              !is.na(sub_df[[group_col]]) &
+              nzchar(as.character(sub_df[[group_col]])), , drop = FALSE
+            ]
+
+            if (!nrow(sub_df) || length(unique(sub_df[[group_col]])) < 2) return(NULL)
+
+            norm  <- check_normality(sub_df, value_col, group_col)
+            if (is.null(norm)) return(NULL)
+
+            homo    <- check_homoscedasticity(sub_df, value_col, group_col,
+                                               norm$is_normal, samp_type)
+            is_homo <- if (is.null(homo)) TRUE else homo$is_homoscedastic
+
+            infer <- select_inferential_test(sub_df, value_col, group_col,
+                                              norm$is_normal, is_homo, samp_type)
+
+            posthoc <- NULL
+            if (!is.null(infer) && infer$is_significant &&
+                length(unique(sub_df[[group_col]])) > 2) {
+              posthoc <- tryCatch(
+                run_posthoc_tests(sub_df, value_col, group_col,
+                                   infer$test_name, comp_type, ctrl_cond),
+                error = function(e) NULL
+              )
+            }
+
+            gsize       <- as.data.frame(table(sub_df[[group_col]]))
+            names(gsize) <- c("Condition", "N")
+            is_balanced  <- length(unique(gsize$N)) == 1
+
+            list(
+              group            = grp,
+              group_sizes      = gsize,
+              is_balanced      = is_balanced,
+              normality        = norm,
+              homoscedasticity = homo,
+              inferential      = infer,
+              posthoc          = posthoc,
+              plots = list(
+                qq       = tryCatch(plot_residual_qq(norm$residuals, theme_fn, sub_df = sub_df),        error = function(e) NULL),
+                fitted   = tryCatch(plot_residuals_vs_fitted(norm$model, theme_fn, sub_df = sub_df),   error = function(e) NULL),
+                leverage = tryCatch(plot_residuals_vs_leverage(norm$model, theme_fn, sub_df = sub_df), error = function(e) NULL),
+                boxplot  = tryCatch(plot_boxplot_by_condition(sub_df, value_col,
+                                                               group_col, theme_fn),                   error = function(e) NULL)
+              )
+            )
+          }),
+          sub_groups
+        )
+
+        results_list <- Filter(Negate(is.null), results_list)
+
+        if (!length(results_list)) {
+          log("❌ Statistics: insufficient data (need >= 2 conditions with >= 3 observations).")
+          return()
+        }
+
+        rv$stats_results <- list(
+          results         = results_list,
+          plot_type       = pt,
+          response_var    = rvar,
+          zone            = zone_sel,
+          comparison_type = comp_type,
+          control         = ctrl_cond,
+          sample_type     = samp_type
+        )
+
+        shiny::updateTabsetPanel(session, "output_tabs", selected = "statistics")
+        log(sprintf("✅ Statistics complete (%d group(s) analysed).", length(results_list)))
+
+      }, error = function(e) {
+        log(paste("❌ Statistics failed:", e$message))
+      })
+    }, ignoreInit = TRUE)
+
+    shiny::observeEvent(input$stat_plot_type, {
+      rv$stats_results <- NULL
+    }, ignoreInit = TRUE)
+
+    output$stats_tables_ui <- shiny::renderUI({
+      res <- rv$stats_results
+      if (is.null(res)) {
+        return(shiny::div(
+          style = "padding:20px; color:#888; text-align:center;",
+          shiny::p("No statistics computed yet."),
+          shiny::p("Select a plot type, response variable and zone, then click 'Run Statistics'.")
+        ))
+      }
+
+      sections <- lapply(seq_along(res$results), function(i) {
+        grp <- names(res$results)[i]
+        r   <- res$results[[grp]]
+
+        local({
+          .i <- i; .r <- r
+
+          output[[paste0("stats_sizes_tbl_",   .i)]] <- shiny::renderTable(
+            .r$group_sizes, striped = TRUE, bordered = TRUE, hover = TRUE)
+
+          output[[paste0("stats_norm_tbl_",    .i)]] <- shiny::renderTable(
+            .r$normality$table, striped = TRUE, bordered = TRUE, hover = TRUE)
+
+          if (!is.null(.r$homoscedasticity))
+            output[[paste0("stats_homo_tbl_",  .i)]] <- shiny::renderTable(
+              .r$homoscedasticity$table, striped = TRUE, bordered = TRUE, hover = TRUE)
+
+          if (!is.null(.r$inferential))
+            output[[paste0("stats_infer_tbl_", .i)]] <- shiny::renderTable(
+              .r$inferential$table, striped = TRUE, bordered = TRUE, hover = TRUE)
+
+          if (!is.null(.r$posthoc))
+            output[[paste0("stats_posthoc_tbl_", .i)]] <- DT::renderDataTable({
+              dt <- DT::datatable(.r$posthoc$table,
+                                   options = list(pageLength = 25, scrollX = TRUE))
+              if ("Significant" %in% names(.r$posthoc$table))
+                dt <- DT::formatStyle(dt, "Significant",
+                       backgroundColor = DT::styleEqual(c(TRUE, FALSE),
+                                                         c("#b3ffb3", "#ffb3b3")))
+              dt
+            })
+        })
+
+        is_sig           <- !is.null(r$inferential) && r$inferential$is_significant
+        infer_badge_bg   <- if (is_sig) "#fff3cd" else "#d4edda"
+        infer_badge_bord <- if (is_sig) "#ffc107"  else "#28a745"
+        infer_badge_txt  <- if (is_sig)
+          paste0("Significant difference detected (p = ", r$inferential$p_value, ")")
+        else if (!is.null(r$inferential))
+          paste0("No significant difference detected (p = ", r$inferential$p_value, ")")
+        else
+          "Analysis could not be completed."
+
+        n_sig_ph         <- if (!is.null(r$posthoc) && "Significant" %in% names(r$posthoc$table))
+          sum(r$posthoc$table$Significant, na.rm = TRUE) else 0L
+        n_total_ph       <- if (!is.null(r$posthoc)) nrow(r$posthoc$table) else 0L
+        posthoc_badge_bg   <- if (n_sig_ph > 0) "#fff3cd" else "#d4edda"
+        posthoc_badge_bord <- if (n_sig_ph > 0) "#ffc107"  else "#28a745"
+        posthoc_badge_txt  <- paste0(
+          n_sig_ph, " / ", n_total_ph,
+          " comparison(s) significant after correction (p_adj < 0.05)."
+        )
+
+        shiny::tagList(
+          if (grp != "all")
+            shiny::h4(shiny::strong(paste("—", grp))) else NULL,
+
+          shiny::h5("Group Sizes"),
+          shiny::p(if (r$is_balanced) "Design: balanced." else "Design: unbalanced."),
+          shiny::tableOutput(ns(paste0("stats_sizes_tbl_", i))),
+          shiny::hr(),
+
+          shiny::h5("1. Normality Test"),
+          shiny::div(class = "well well-sm",
+            shiny::p(shiny::strong("H0:"), " Residuals follow a normal distribution (p > 0.05)."),
+            shiny::p(shiny::strong("H1:"), " Residuals do NOT follow a normal distribution (p <= 0.05).")
+          ),
+          shiny::tableOutput(ns(paste0("stats_norm_tbl_", i))),
+
+          if (!is.null(r$homoscedasticity)) shiny::tagList(
+            shiny::hr(),
+            shiny::h5("2. Homoscedasticity Test"),
+            shiny::div(class = "well well-sm",
+              shiny::p(shiny::strong("H0:"), " Variances are equal between groups (p > 0.05)."),
+              shiny::p(shiny::strong("H1:"), " At least one group has a different variance (p <= 0.05).")
+            ),
+            shiny::tableOutput(ns(paste0("stats_homo_tbl_", i)))
+          ) else NULL,
+
+          if (!is.null(r$inferential)) shiny::tagList(
+            shiny::hr(),
+            shiny::h5(paste0(if (!is.null(r$homoscedasticity)) "3." else "2.", " Inferential Test")),
+            shiny::div(class = "well well-sm",
+              shiny::p(shiny::strong("H0:"), " There is no difference between the compared groups (p > 0.05)."),
+              shiny::p(shiny::strong("H1:"), " At least one group differs from the others (p <= 0.05).")
+            ),
+            shiny::tableOutput(ns(paste0("stats_infer_tbl_", i))),
+            shiny::div(
+              style = paste0("padding:8px 14px; background:", infer_badge_bg,
+                             "; border-left:4px solid ", infer_badge_bord, "; margin:8px 0;"),
+              shiny::strong(infer_badge_txt)
+            )
+          ) else NULL,
+
+          if (!is.null(r$posthoc)) shiny::tagList(
+            shiny::hr(),
+            shiny::h5(paste0("Post-hoc: ", r$posthoc$method)),
+            shiny::p(shiny::em(paste("Design:",
+              if (r$posthoc$is_balanced) "balanced" else "unbalanced"))),
+            DT::dataTableOutput(ns(paste0("stats_posthoc_tbl_", i))),
+            shiny::div(
+              style = paste0("padding:8px 14px; background:", posthoc_badge_bg,
+                             "; border-left:4px solid ", posthoc_badge_bord, "; margin:8px 0;"),
+              shiny::strong(posthoc_badge_txt)
+            )
+          ) else NULL,
+
+          shiny::div(style = "margin-bottom:28px;")
+        )
+      })
+
+      do.call(shiny::tagList, sections)
+    })
+
+    output$stats_figures_ui <- shiny::renderUI({
+      res <- rv$stats_results
+      if (is.null(res)) {
+        return(shiny::div(
+          style = "padding:20px; color:#888; text-align:center;",
+          shiny::p("No figures to display yet. Run statistics first.")
+        ))
+      }
+
+      sections <- lapply(seq_along(res$results), function(i) {
+        grp <- names(res$results)[i]
+        r   <- res$results[[grp]]
+
+        local({
+          .i <- i; .r <- r
+          if (!is.null(.r$plots$qq))
+            output[[paste0("stats_qq_plot_",  .i)]] <- ggiraph::renderGirafe(
+              to_girafe(.r$plots$qq, width_svg = 12, height_svg = 6))
+          if (!is.null(.r$plots$fitted))
+            output[[paste0("stats_fit_plot_", .i)]] <- ggiraph::renderGirafe(
+              to_girafe(.r$plots$fitted, width_svg = 12, height_svg = 6))
+          if (!is.null(.r$plots$leverage))
+            output[[paste0("stats_lev_plot_", .i)]] <- ggiraph::renderGirafe(
+              to_girafe(.r$plots$leverage, width_svg = 12, height_svg = 6))
+          if (!is.null(.r$plots$boxplot))
+            output[[paste0("stats_box_plot_", .i)]] <- ggiraph::renderGirafe(
+              to_girafe(.r$plots$boxplot, width_svg = 12, height_svg = 6))
+        })
+
+        shiny::tagList(
+          if (grp != "all")
+            shiny::h4(shiny::strong(paste("—", grp))) else NULL,
+          if (!is.null(r$plots$qq)) shiny::tagList(
+            shiny::h5("QQ-Plot of Residuals"),
+            ggiraph::girafeOutput(ns(paste0("stats_qq_plot_",  i)), width = "100%", height = "400px")
+          ) else NULL,
+          if (!is.null(r$plots$fitted)) shiny::tagList(
+            shiny::h5("Residuals vs Fitted"),
+            ggiraph::girafeOutput(ns(paste0("stats_fit_plot_", i)), width = "100%", height = "400px")
+          ) else NULL,
+          if (!is.null(r$plots$leverage)) shiny::tagList(
+            shiny::h5("Residuals vs Leverage"),
+            ggiraph::girafeOutput(ns(paste0("stats_lev_plot_", i)), width = "100%", height = "400px")
+          ) else NULL,
+          if (!is.null(r$plots$boxplot)) shiny::tagList(
+            shiny::h5("Distribution by Condition"),
+            ggiraph::girafeOutput(ns(paste0("stats_box_plot_", i)), width = "100%", height = "400px")
+          ) else NULL,
+          shiny::div(style = "margin-bottom:28px;")
+        )
+      })
+
+      do.call(shiny::tagList, sections)
+    })
 
     onStop(function() {
       rv$plot_gg <- NULL

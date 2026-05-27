@@ -29,9 +29,9 @@ raw_data_ui <- function(
     "))),
 
     shiny::fluidRow(
-      # ---- Excel inputs ----
+      # ---- Excel / CSV inputs ----
       shinydashboard::box(
-        title = "Raw Data Inputs (Excel)",
+        title = "Raw Data Inputs (Excel / CSV)",
         width = 6,
         shiny::wellPanel(
           shiny::tags$div(
@@ -39,11 +39,11 @@ raw_data_ui <- function(
             shiny::tagAppendAttributes(
               shiny::fileInput(
                 ns("raw_xlsx_files"),
-                "Upload Raw Data Files (.xlsx) — 1 file = 1 plate",
+                "Upload Raw Data Files (.xlsx, .xls, .csv) — 1 file = 1 plate",
                 multiple = TRUE,
-                accept = c(".xlsx")
+                accept = c(".xlsx", ".xls", ".csv")
               ),
-              `aria-label` = "Upload Excel .xlsx files"
+              `aria-label` = "Upload Excel or CSV files"
             )
           ),
           shiny::tags$div(
@@ -136,7 +136,7 @@ raw_data_server <- function(id, rv) {
 
           rv$raw_xlsx_list <- lapply(seq_len(n), function(i) {
             shiny::incProgress(step, detail = files$name[i])
-            read_file(files$datapath[i], files$name[i])
+            read_raw_file(files$datapath[i], files$name[i])
           })
         })
 
@@ -161,7 +161,7 @@ raw_data_server <- function(id, rv) {
 
           rv$raw_zip_list <- lapply(seq_len(n), function(i) {
             shiny::incProgress(step, detail = files$name[i])
-            read_file(files$datapath[i], files$name[i])
+            read_raw_file(files$datapath[i], files$name[i])
           })
         })
 

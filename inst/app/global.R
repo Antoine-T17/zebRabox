@@ -7,16 +7,6 @@
 # Global Utility Functions
 # ----------------------------------------------------------------------
 
-library(shiny)
-
-# Convert selected columns to numeric (with locale-safe decimal replacement)
-convert_numeric_cols <- function(df, cols) {
-  for (col in intersect(names(df), cols)) {
-    df[[col]] <- as.numeric(gsub(",", ".", as.character(df[[col]])))
-  }
-  df
-}
-
 # UI placeholder shown until modes are defined
 waiting_message_ui <- function() {
   shiny::fluidRow(
@@ -33,55 +23,6 @@ waiting_message_ui <- function() {
   )
 }
 
-# File Reading Utility (xlsx / zip that contains txt only)
-read_file <- function(path, file_name) {
-  ext <- tolower(tools::file_ext(file_name))
-
-  if (ext == "xlsx") {
-    df <- readxl::read_excel(path)
-    df <- as.data.frame(df)
-    attr(df, "file_name") <- file_name
-    return(df)
-  }
-
-  if (ext == "zip") {
-    tmp <- file.path(
-      tempdir(),
-      paste0("unz_", as.integer(Sys.time()), "_", sample.int(1e6, 1))
-    )
-    dir.create(tmp, recursive = TRUE, showWarnings = FALSE)
-
-    utils::unzip(path, exdir = tmp)
-
-    txt_files <- list.files(
-      tmp,
-      pattern = "\\.txt$",
-      full.names = TRUE,
-      recursive = TRUE
-    )
-    if (!length(txt_files)) {
-      stop("ZIP contains no .txt files: ", file_name)
-    }
-
-    dfs <- lapply(txt_files, function(fp) {
-      txt_name <- tools::file_path_sans_ext(basename(fp))  # e.g. "A01"
-
-      d <- data.table::fread(fp, data.table = FALSE, showProgress = FALSE)
-      d <- as.data.frame(d)
-
-      # Only keep the txt filename as an identifier
-      d$file_txt_name <- txt_name
-      d
-    })
-
-    df <- dplyr::bind_rows(dfs)
-    attr(df, "file_name") <- file_name
-    return(df)
-  }
-
-  stop("Unsupported file type (only .xlsx or .zip): ", file_name)
-}
-
 
 # Notification helper
 notify <- function(msg, type = c("message","warning","error"), duration = 6) {
@@ -90,205 +31,25 @@ notify <- function(msg, type = c("message","warning","error"), duration = 6) {
 }
 
 # ======================================================================
-# Processing mode configuration (used by the generic processing module)
+# Mode configuration factories — get_processing_config() and
+# get_visualization_config() are exported from the zebRabox package
+# (R/config.R) and available here because the package is loaded.
 # ======================================================================
-
-processing_config <- list(
-  tm_ldm = list(
-    ui_title = "Tracking Mode, Light-Dark Mode",
-    # maps "lightXX" -> "light", "darkYY" -> "dark", otherwise unchanged
-    period_map = function(x) {
-      dplyr::case_when(
-        stringr::str_detect(x, "^light") ~ "light",
-        stringr::str_detect(x, "^dark")  ~ "dark",
-        TRUE ~ x
-      )
-    }
-  ),
-  tm_vm = list(
-    ui_title = "Tracking Mode, Vibration-Rest Mode",
-    # maps "vibrationXX" -> "vibration", "restYY" -> "rest", otherwise unchanged
-    period_map = function(x) {
-      dplyr::case_when(
-        stringr::str_detect(x, "^vibration") ~ "vibration",
-        stringr::str_detect(x, "^rest")      ~ "rest",
-        TRUE ~ x
-      )
-    }
-  )
-)
-
-# Small helper to fetch config safely
-# global.R (append)
-
-# Return a configuration list used by the generic processing module
-get_processing_config <- function(mode) {
-  ldm_period_map <- function(x) {
-    dplyr::case_when(
-      stringr::str_detect(x, "^light") ~ "light",
-      stringr::str_detect(x, "^dark")  ~ "dark",
-      TRUE ~ x
-    )
-  }
-
-  vm_period_map <- function(x) {
-    dplyr::case_when(
-      stringr::str_detect(x, "^vibration") ~ "vibration",
-      stringr::str_detect(x, "^rest")      ~ "rest",
-      TRUE ~ x
-    )
-  }
-
-  qm_filter_fn <- function(df) {
-    if ("datatype" %in% colnames(df) && any(stringr::str_detect(df$datatype, "quantauc"))) {
-      dplyr::filter(df, stringr::str_detect(datatype, "quantauc"))
-    } else {
-      df
-    }
-  }
-
-  switch(mode,
-         "tm_ldm" = list(
-           ui_title        = "Tracking Mode, Light-Dark Mode",
-           period_map      = ldm_period_map,
-           period_keys     = c("light", "dark"),       # déjà là
-           convert_cols    = c("inact","inadur","inadist","smlct","smldist","smldur","larct","lardur","lardist","emptyct","emptydur","period"),
-           zone_num_cols   = c("inact","inadur","inadist","smlct","smldist","smldur","larct","lardur","lardist","emptyct","emptydur"),
-           filter_fn       = NULL
-         ),
-         "tm_vm" = list(
-           ui_title        = "Tracking Mode, Vibration-Rest Mode",
-           period_map      = vm_period_map,
-           period_keys     = c("vibration", "rest"),   # déjà là
-           convert_cols    = c("inact","inadur","inadist","smlct","smldist","smldur","larct","lardur","lardist","emptyct","emptydur","period"),
-           zone_num_cols   = c("inact","inadur","inadist","smlct","smldist","smldur","larct","lardur","lardist","emptyct","emptydur"),
-           filter_fn       = NULL
-         ),
-         "qm_ldm" = list(
-           ui_title        = "Quantization Mode, Light-Dark Mode",
-           period_map      = ldm_period_map,
-           period_keys     = c("light", "dark"),       # AJOUTÉ
-           convert_cols    = c("frect","fredur","midct","middur","burct","burdur","zerct","zerdur","actinteg","period"),
-           zone_num_cols   = c("frect","fredur","midct","middur","burct","burdur","zerct","zerdur","actinteg"),
-           filter_fn       = qm_filter_fn
-         ),
-         "qm_vm" = list(
-           ui_title        = "Quantization Mode, Vibration-Rest Mode",
-           period_map      = vm_period_map,
-           period_keys     = c("vibration", "rest"),   # AJOUTÉ
-           convert_cols    = c("frect","fredur","midct","middur","burct","burdur","zerct","zerdur","actinteg","period"),
-           zone_num_cols   = c("frect","fredur","midct","middur","burct","burdur","zerct","zerdur","actinteg"),
-           filter_fn       = qm_filter_fn
-         ),
-         list(
-           ui_title        = "Tracking Mode, Light-Dark Mode",
-           period_map      = ldm_period_map,
-           period_keys     = c("light", "dark"),
-           convert_cols    = c("inact","inadur","inadist","smlct","smldist","smldur","larct","lardur","lardist","emptyct","emptydur","period"),
-           zone_num_cols   = c("inact","inadur","inadist","smlct","smldist","smldur","larct","lardur","lardist","emptyct","emptydur"),
-           filter_fn       = NULL
-         )
-  )
-}
-
-# ======================================================================
-# Visualization config (which response vars & period labels per mode)
-# ======================================================================
-
-get_visualization_config <- function(mode) {
-  # Expected metric sets
-  tm_expected <- c(
-    "totaldist","totaldur","totalct","totalspeed",
-    "lardist","lardur","larct","larspeed",
-    "smldist","smldur","smlct","smlspeed",
-    "inadist","inadur","inact","emptydur","emptyct"
-  )
-  qm_expected <- c("frect","fredur","midct","middur","burct","burdur","zerct","zerdur","actinteg")
-
-  # Label helpers
-  ldm_period_keys   <- c("light","dark")
-  ldm_period_labels <- c("Light period","Dark period")
-  vm_period_keys    <- c("vibration","rest")
-  vm_period_labels  <- c("Vibration period","Rest period")
-
-  switch(mode,
-         "tm_ldm" = list(
-           ui_title             = "Tracking Mode, Light-Dark Mode",
-           expected_vars        = tm_expected,
-           period_keys          = ldm_period_keys,
-           period_labels        = ldm_period_labels,
-           period_ui_name       = "Light/Dark",
-           period_default_colors = "#FFC300,#B3AAAA"
-         ),
-         "tm_vm" = list(
-           ui_title             = "Tracking Mode, Vibration-Rest Mode",
-           expected_vars        = tm_expected,
-           period_keys          = vm_period_keys,
-           period_labels        = vm_period_labels,
-           period_ui_name       = "Vibration/Rest",
-           period_default_colors = "#5E81AC,#A3BE8C"
-         ),
-         "qm_ldm" = list(
-           ui_title             = "Quantization Mode, Light-Dark Mode",
-           expected_vars        = qm_expected,
-           period_keys          = ldm_period_keys,
-           period_labels        = ldm_period_labels,
-           period_ui_name       = "Light/Dark",
-           period_default_colors = "#FFC300,#B3AAAA"
-         ),
-         "qm_vm" = list(
-           ui_title             = "Quantization Mode, Vibration-Rest Mode",
-           expected_vars        = qm_expected,
-           period_keys          = vm_period_keys,
-           period_labels        = vm_period_labels,
-           period_ui_name       = "Vibration/Rest",
-           period_default_colors = "#5E81AC,#A3BE8C"
-         ),
-         # fallback
-         list(
-           ui_title             = "Tracking Mode, Light-Dark Mode",
-           expected_vars        = tm_expected,
-           period_keys          = ldm_period_keys,
-           period_labels        = ldm_period_labels,
-           period_ui_name       = "Light/Dark",
-           period_default_colors = "#FFC300,#B3AAAA"
-         )
-  )
-}
-
-# ----------------------------------------------------------------------
-# Time conversion utility (used by visualization module)
-# ----------------------------------------------------------------------
-convert_time <- function(x, from, to) {
-  if (from == to) return(x)
-  f <- c(seconds = 1, minutes = 60, hours = 3600, days = 86400)
-  x * f[[from]] / f[[to]]
-}
-
-# ----------------------------------------------------------------------
-# Color utility: ensure exactly n colors (repeat/truncate/generate)
-# ----------------------------------------------------------------------
-ensure_colors <- function(n, cols = character(0)) {
-  cols <- cols[!is.na(cols) & nzchar(trimws(cols))]
-  if (length(cols) == 0) {
-    base <- tryCatch(RColorBrewer::brewer.pal(min(8, max(3, n)), "Set1"),
-                     error = function(e) grDevices::rainbow(min(8, max(3, n))))
-    return(grDevices::colorRampPalette(base)(n))
-  }
-  cols <- trimws(cols)
-  if (length(cols) < n) {
-    cols <- rep(cols, length.out = n)
-  } else if (length(cols) > n) {
-    cols <- cols[seq_len(n)]
-  }
-  cols
-}
 
 # ----------------------------------------------------------------------
 # Options
 # ----------------------------------------------------------------------
 # Allow large Excel uploads (500 MB)
 options(shiny.maxRequestSize = 500 * 1024^2)
+
+# ----------------------------------------------------------------------
+# Remove stale theme-helper copies from .GlobalEnv.
+# global.R is sourced by Shiny into .GlobalEnv, so any leftover light_theme /
+# dark_theme / void_theme from a previous source() call or saved .RData would
+# shadow the package versions. Removing them here lets normal search-path
+# lookup find the correct zebRabox:: versions without polluting .GlobalEnv.
+# ----------------------------------------------------------------------
+invisible(suppressWarnings(rm(list = c("light_theme", "dark_theme", "void_theme"))))
 
 # ----------------------------------------------------------------------
 # Auto-load All Modules

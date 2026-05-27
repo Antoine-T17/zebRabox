@@ -13,6 +13,8 @@ LazyData: true
 Depends: R (>= 4.1.0)
 Imports:
     bslib,
+    car,
+    data.table,
     DT,
     dplyr,
     fmsb,
@@ -21,15 +23,18 @@ Imports:
     ggiraph,
     ggplot2,
     htmlwidgets,
+    multcomp,
     openxlsx,
     plotly,
     purrr,
     RColorBrewer,
     readxl,
     rhandsontable,
+    rstatix,
     sass,
     scales,
     shiny,
+    shinycssloaders,
     shinydashboard,
     shinyjqui,
     shinyjs,
@@ -39,5 +44,8 @@ Imports:
     withr,
     writexl,
     zip
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
