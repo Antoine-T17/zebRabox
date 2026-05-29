@@ -130,7 +130,7 @@ plate_plan_server <- function(id, rv) {
               input$plate_plan_files$datapath,
               input$plate_plan_files$name
             )
-            rv$plate_plan_type    <- lapply(plate_plan_list, detect_plate_type)
+            rv$plate_plan_type    <- lapply(plate_plan_list, zebRabox:::detect_plate_type)
             rv$plate_plan_df_list <- plate_plan_list
             notify("Plate plans loaded successfully.", type = "message")
           }
@@ -196,7 +196,7 @@ plate_plan_server <- function(id, rv) {
 
         type_i  <- rv$plate_plan_type[[i]]
         n_r_i   <- if (!is.null(type_i) && !is.na(type_i))
-                     length(get_well_config(as.character(type_i))$rows) else 8L
+                     length(zebRabox:::get_well_config(as.character(type_i))$rows) else 8L
         fig_h_i <- paste0(n_r_i * 38L + 100L, "px")
 
         shiny::tabPanel(
@@ -257,8 +257,8 @@ plate_plan_server <- function(id, rv) {
           }
 
           df <- rv$plate_plan_df_list[[i]]
-          df <- parse_well_coords(df)
-          df <- normalize_plate_conditions(df)
+          df <- zebRabox:::parse_well_coords(df)
+          df <- zebRabox:::normalize_plate_conditions(df)
 
           # Count wells per condition (exclude X)
           counts <- sort(table(df$Condition[df$Condition != "X"]), decreasing = TRUE)
@@ -271,7 +271,7 @@ plate_plan_server <- function(id, rv) {
 
           # Build the same color mapping as the plot
           conditions <- unique(df$Condition[df$Condition != "X"])
-          colors <- plate_condition_colors(conditions)
+          colors <- zebRabox:::plate_condition_colors(conditions)
 
           dt <- DT::datatable(
             out,
@@ -324,8 +324,8 @@ plate_plan_server <- function(id, rv) {
             ))
           }
 
-          df <- parse_well_coords(df)
-          df <- normalize_plate_conditions(df)
+          df <- zebRabox:::parse_well_coords(df)
+          df <- zebRabox:::normalize_plate_conditions(df)
 
           conditions_no_x <- unique(df$Condition[df$Condition != "X"])
           if (length(conditions_no_x) == 0) {
@@ -342,7 +342,7 @@ plate_plan_server <- function(id, rv) {
                                   title = paste("Plate", i, "- Unknown format")))
           }
 
-          config <- get_well_config(plate_type_i)
+          config <- zebRabox:::get_well_config(plate_type_i)
 
           grid        <- expand.grid(
             Row    = factor(config$rows, levels = config$rows),
@@ -358,7 +358,7 @@ plate_plan_server <- function(id, rv) {
             df$well_id
           )
 
-          colors      <- plate_condition_colors(conditions_no_x)
+          colors      <- zebRabox:::plate_condition_colors(conditions_no_x)
           all_conds   <- c(conditions_no_x, if ("X" %in% df$Condition) "X")
 
           cell_px     <- 38L

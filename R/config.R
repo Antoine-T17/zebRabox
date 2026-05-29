@@ -3,6 +3,69 @@
 # Configuration factories for ZebraBox analytical modes
 # ======================================================================
 
+#' Select an analytical mode and retrieve both configuration objects
+#'
+#' User-friendly wrapper around [get_processing_config()] and
+#' [get_visualization_config()]. Accepts plain English terms instead of the
+#' internal mode key (`"tm_ldm"`, etc.) and returns both configs in a single
+#' list, ready to be passed to [run_processing()] and the visualization
+#' helpers.
+#'
+#' @param primary Character. Acquisition type: `"tracking"` (Tracking Mode)
+#'   or `"quantization"` (Quantization Mode). Case-insensitive.
+#' @param secondary Character. Stimulus type: `"light_dark"` (Light/Dark
+#'   alternation) or `"vibration"` (Vibration/Rest alternation).
+#'   Case-insensitive.
+#' @return A named list with three elements:
+#'   \describe{
+#'     \item{`processing`}{Config list for [run_processing()], identical to
+#'       the output of [get_processing_config()].}
+#'     \item{`visualization`}{Config list for visualization helpers, identical
+#'       to the output of [get_visualization_config()].}
+#'     \item{`mode_key`}{Character. The internal mode key derived from the
+#'       inputs (e.g. `"tm_ldm"`), useful for troubleshooting.}
+#'   }
+#' @seealso [get_processing_config()], [get_visualization_config()],
+#'   [run_processing()]
+#' @export
+#' @examples
+#' cfg <- set_mode("tracking", "light_dark")
+#' result  <- run_processing(..., cfg = cfg$processing)
+#' dataset <- prepare_all_zone(result$processed_data_list, cfg$visualization)
+set_mode <- function(primary, secondary) {
+  primary   <- tolower(trimws(as.character(primary)))
+  secondary <- tolower(trimws(as.character(secondary)))
+
+  valid_primary   <- c("tracking", "quantization")
+  valid_secondary <- c("light_dark", "vibration")
+
+  if (!primary %in% valid_primary)
+    stop(sprintf(
+      "'primary' must be one of: %s. Got: \"%s\".",
+      paste0('"', valid_primary, '"', collapse = ", "),
+      primary
+    ))
+
+  if (!secondary %in% valid_secondary)
+    stop(sprintf(
+      "'secondary' must be one of: %s. Got: \"%s\".",
+      paste0('"', valid_secondary, '"', collapse = ", "),
+      secondary
+    ))
+
+  mode_key <- paste0(
+    switch(primary,   "tracking" = "tm", "quantization" = "qm"),
+    "_",
+    switch(secondary, "light_dark" = "ldm", "vibration" = "vm")
+  )
+
+  list(
+    processing    = get_processing_config(mode_key),
+    visualization = get_visualization_config(mode_key),
+    mode_key      = mode_key
+  )
+}
+
 #' Get processing configuration for a ZebraBox analytical mode
 #'
 #' Returns a named list of parameters used by [run_processing()] and its

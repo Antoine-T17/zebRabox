@@ -30,6 +30,7 @@
 #'   The \code{file_name} attribute of each data frame is set to
 #'   \code{"<name>_plate_<i>.xlsx"}.
 #'
+#' @seealso [read_plate_plan_files()], [run_processing()]
 #' @export
 #' @examples
 #' plans <- create_plate_plan(
@@ -198,7 +199,7 @@ create_plate_plan <- function(
 #'   `<row><col>_plate_<i>` convention (e.g. `"A01_plate_1"`).
 #' @return Integer scalar: 12L, 24L, 48L or 96L. Returns `NA_integer_`
 #'   when the layout cannot be identified.
-#' @export
+#' @keywords internal
 detect_plate_type <- function(df) {
   wells <- sub("_plate_.*", "", df$animal)
   rows  <- unique(sub("([A-Z]).*",     "\\1", wells))
@@ -216,7 +217,7 @@ detect_plate_type <- function(df) {
 #'     \item{`rows`}{Character vector of row letters.}
 #'     \item{`cols`}{Integer vector of column indices.}
 #'   }
-#' @export
+#' @keywords internal
 get_well_config <- function(plate_type) {
   configs <- list(
     "12" = list(rows = LETTERS[1:3],  cols = 1:4),
@@ -244,7 +245,7 @@ get_well_config <- function(plate_type) {
 #'     \item{`Column`}{Integer column index (e.g. `1L`).}
 #'     \item{`well_id`}{Well identifier without plate suffix (e.g. `"A01"`).}
 #'   }
-#' @export
+#' @keywords internal
 parse_well_coords <- function(df) {
   df$Row     <- sub("([A-Z])\\d{2}_plate_\\d+", "\\1", df$animal)
   df$Column  <- as.integer(sub("[A-Z](\\d{2})_plate_\\d+", "\\1", df$animal))
@@ -261,7 +262,7 @@ parse_well_coords <- function(df) {
 #' @param df Data frame with a `condition` column (or `Condition_Base`).
 #' @return `df` with a new `Condition` column (character). If
 #'   `Condition_Base` was present it is removed.
-#' @export
+#' @keywords internal
 normalize_plate_conditions <- function(df) {
   if ("Condition_Base" %in% colnames(df)) {
     df$Condition      <- df$Condition_Base
@@ -284,7 +285,7 @@ normalize_plate_conditions <- function(df) {
 #' @param conditions Character vector of condition names (must not include
 #'   `"X"`).
 #' @return Named character vector of hex colors; `"X"` maps to `"#FFFFFF"`.
-#' @export
+#' @keywords internal
 plate_condition_colors <- function(conditions) {
   cols <- scales::hue_pal()(length(conditions))
   stats::setNames(c(cols, "#FFFFFF"), c(conditions, "X"))
@@ -298,14 +299,15 @@ plate_condition_colors <- function(conditions) {
 #' (case-insensitive) by display name — matching the convention used for
 #' raw XLSX files throughout the app.
 #'
-#' @param paths Character vector of file paths (e.g. Shiny's
-#'   `input$files$datapath`).
+#' @param paths Character vector of file paths.
 #' @param names Character vector of display names the same length as
-#'   `paths` (e.g. `input$files$name`).
+#'   `paths`. Defaults to `basename(paths)`, so it can be omitted in
+#'   standalone use. In a Shiny session pass `input$files$name` explicitly.
 #' @return A list of data frames, one per file, in alphabetical order of
 #'   `names`.
+#' @seealso [create_plate_plan()], [run_processing()]
 #' @export
-read_plate_plan_files <- function(paths, names) {
+read_plate_plan_files <- function(paths, names = basename(paths)) {
   n <- length(paths)
   if (length(names) != n)
     stop("`paths` and `names` must have the same length.")

@@ -4,7 +4,7 @@
 \alias{run_app}
 \title{Run ZebRabox}
 \usage{
-run_app(...)
+run_app(..., launch.browser = TRUE)
 }
 \description{
 Run ZebRabox

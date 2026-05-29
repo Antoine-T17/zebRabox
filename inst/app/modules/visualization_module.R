@@ -239,10 +239,6 @@ visualization_module_ui <- function(id, config) {
           )
         )
       ),
-
-      # ------------------------------------------------------------------
-      # Right output panel (inchangé)
-      # ------------------------------------------------------------------
       shinydashboard::box(
         title = "Visualization Output", width = 8,
         shiny::div(style = "margin-bottom:10px;",
@@ -285,8 +281,10 @@ visualization_module_ui <- function(id, config) {
                           ),
                           shiny::selectInput(ns("dataset_response_var"), "Response Variable", choices = "", selected = ""),
                           DT::dataTableOutput(ns("dataset_table")),
-                          shiny::div(style="margin-top:10px; margin-bottom:10px;",
-                                     shiny::downloadButton(ns("download_current_dataset"), "Download Current Dataset (.xlsx)")
+                          shiny::div(
+                            style = "margin-top:10px; margin-bottom:10px; display:flex; gap:10px; flex-wrap:wrap;",
+                            shiny::downloadButton(ns("download_current_dataset"), "Download Current Variable (.xlsx)"),
+                            shiny::downloadButton(ns("download_all_variables"),   "Download All Variables (.xlsx)")
                           )
           ),
 
@@ -385,7 +383,6 @@ visualization_module_ui <- function(id, config) {
 visualization_module_server <- function(id, rv, config) {
   shiny::moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    `%||%` <- function(a, b) if (is.null(a)) b else a
 
     cfg <- shiny::reactive({
       if (is.function(config)) tryCatch(config(), error = function(e) NULL) else config
@@ -481,7 +478,7 @@ visualization_module_server <- function(id, rv, config) {
       df <- txt_base()
       if (is.null(df) || !nrow(df)) return(character(0))
 
-      resolve_txt_selected_wells(
+      zebRabox:::resolve_txt_selected_wells(
         df = df,
         plate_ids = input$txt_plate_select %||% character(0),
         selected_conditions = input$txt_condition_select %||% character(0),
@@ -495,7 +492,7 @@ visualization_module_server <- function(id, rv, config) {
       if (is.null(df) || !nrow(df) || !length(wells)) return(NULL)
 
       rng <- tryCatch(
-        resolve_txt_time_range(
+        zebRabox:::resolve_txt_time_range(
           df = df,
           well_keys = wells,
           mode = input$txt_time_mode,
@@ -508,7 +505,7 @@ visualization_module_server <- function(id, rv, config) {
 
       if (is.null(rng)) return(NULL)
 
-      df <- add_txt_keys(df) |>
+      df <- zebRabox:::add_txt_keys(df) |>
         dplyr::filter(
           well_key %in% wells,
           T >= rng[1],
@@ -517,7 +514,7 @@ visualization_module_server <- function(id, rv, config) {
 
       if (!nrow(df)) return(NULL)
 
-      native_dt <- estimate_txt_dt(df)
+      native_dt <- zebRabox:::estimate_txt_dt(df)
       window_len <- max(diff(rng), native_dt)
 
       target_points <- max(25, suppressWarnings(as.numeric(input$txt_target_points)))
@@ -575,7 +572,7 @@ visualization_module_server <- function(id, rv, config) {
 
       shiny::req(input$txt_plate_select)
 
-      sub <- add_txt_keys(df) |>
+      sub <- zebRabox:::add_txt_keys(df) |>
         dplyr::filter(plate_id %in% input$txt_plate_select)
 
       if (!is.null(input$txt_condition_select) && length(input$txt_condition_select)) {
@@ -617,7 +614,7 @@ visualization_module_server <- function(id, rv, config) {
         return(shiny::helpText("Select at least one well or one condition."))
       }
 
-      df <- add_txt_keys(df) |>
+      df <- zebRabox:::add_txt_keys(df) |>
         dplyr::filter(well_key %in% wells)
 
       periods <- df |>
@@ -653,7 +650,7 @@ visualization_module_server <- function(id, rv, config) {
       if (is.null(df) || !nrow(df) || !length(wells)) return("")
 
       rng <- tryCatch(
-        resolve_txt_time_range(
+        zebRabox:::resolve_txt_time_range(
           df = df,
           well_keys = wells,
           mode = input$txt_time_mode,
@@ -836,9 +833,9 @@ visualization_module_server <- function(id, rv, config) {
       ymin <- yr[1] - pad
       ymax <- yr[2] + pad
 
-      theme_is_light <- tolower(input$theme_switch) == "light"
-      theme_obj <- if (theme_is_light) light_theme() else dark_theme()
-      edge_col  <- if (theme_is_light) "black" else "white"
+      th        <- get_theme(input$theme_switch)
+      theme_obj <- th$obj
+      edge_col  <- th$edge_col
 
       bands <- data.frame(
         x0 = c(t1, t2, t3),
@@ -1026,7 +1023,7 @@ visualization_module_server <- function(id, rv, config) {
           shiny::req(length(wells) > 0)
           incProgress(0.2)
 
-          rng <- resolve_txt_time_range(
+          rng <- zebRabox:::resolve_txt_time_range(
             df = txt_base(),
             well_keys = wells,
             mode = input$txt_time_mode,
@@ -1036,7 +1033,7 @@ visualization_module_server <- function(id, rv, config) {
           )
           incProgress(0.6)
 
-          rv$txt_spatial_current <- build_txt_trajectory_df(
+          rv$txt_spatial_current <- zebRabox:::build_txt_trajectory_df(
             df = txt_base(),
             well_keys = wells,
             time_range = rng,
@@ -1112,12 +1109,12 @@ visualization_module_server <- function(id, rv, config) {
     }
 
     generate_txt_plot <- function(df, theme_choice, show_points = TRUE) {
-      theme_is_light <- tolower(theme_choice) == "light"
-      theme_obj <- if (theme_is_light) light_theme() else dark_theme()
-      edge_col  <- if (theme_is_light) "black" else "white"
+      th        <- get_theme(theme_choice)
+      theme_obj <- th$obj
+      edge_col  <- th$edge_col
 
       cond_levels <- sort(unique(as.character(df$condition_grouped)))
-      cols <- ensure_colors(length(cond_levels))
+      cols <- zebRabox:::ensure_colors(length(cond_levels))
       names(cols) <- cond_levels
 
       start_df <- df |>
@@ -1217,7 +1214,7 @@ visualization_module_server <- function(id, rv, config) {
       raw_cols <- if (nzchar(input$condition_grouped_color))
         trimws(strsplit(input$condition_grouped_color, ",")[[1]]) else character(0)
 
-      cols <- ensure_colors(length(ord), raw_cols)
+      cols <- zebRabox:::ensure_colors(length(ord), raw_cols)
       names(cols) <- ord
       list(order = ord, colors = cols)
     }
@@ -1370,18 +1367,18 @@ visualization_module_server <- function(id, rv, config) {
       if (!length(vis)) {
         return(ggplot2::ggplot() +
                  ggplot2::annotate("text", x = 0, y = 0, label = "No condition selected") +
-                 void_theme())
+                 zebRabox:::void_theme())
       }
       sub <- sub[sub$condition_grouped %in% vis, , drop = FALSE]
       if (!nrow(sub)) {
         return(ggplot2::ggplot() +
                  ggplot2::annotate("text", x = 0, y = 0, label = "No data after filtering") +
-                 void_theme())
+                 zebRabox:::void_theme())
       }
 
-      theme_is_light <- tolower(theme_choice) == "light"
-      theme_obj <- if (theme_is_light) light_theme() else dark_theme()
-      edge_col  <- if (theme_is_light) "black" else "white"
+      th        <- get_theme(theme_choice)
+      theme_obj <- th$obj
+      edge_col  <- th$edge_col
 
       hover_css_pts <- "r:6!important;opacity:1!important;fill-opacity:1!important;stroke-opacity:1!important;"
       hover_css_box <- "fill:transparent!important;stroke:transparent!important;opacity:1!important;"
@@ -1394,7 +1391,7 @@ visualization_module_server <- function(id, rv, config) {
 
       cols_named <- condition_colors
       if (is.null(names(cols_named)) || length(cols_named) != length(ord) || any(!(ord %in% names(cols_named)))) {
-        cols_named <- ensure_colors(length(ord), cols_named); names(cols_named) <- ord
+        cols_named <- zebRabox:::ensure_colors(length(ord), cols_named); names(cols_named) <- ord
       }
 
       pt_size <- 2.3; pt_alpha <- 0.65; jit_w <- 0.18; box_lwd <- 0.55; sina_maxw <- 0.25
@@ -1451,7 +1448,7 @@ visualization_module_server <- function(id, rv, config) {
         }
 
         per_cols_in <- trimws(strsplit(input$boxplot_periods_colors, ",")[[1]])
-        per_cols    <- ensure_colors(length(per_levels), per_cols_in)
+        per_cols    <- zebRabox:::ensure_colors(length(per_levels), per_cols_in)
         names(per_cols) <- per_levels
 
         tooltip_pts <- rlang::expr(paste0(
@@ -1589,7 +1586,7 @@ visualization_module_server <- function(id, rv, config) {
         }
 
         phase_cols_in <- trimws(strsplit(input$boxplot_delta_phase_colors, ",")[[1]])
-        phase_cols <- ensure_colors(length(present_phase), phase_cols_in); names(phase_cols) <- present_phase
+        phase_cols <- zebRabox:::ensure_colors(length(present_phase), phase_cols_in); names(phase_cols) <- present_phase
 
         tooltip_pts <- rlang::expr(paste0(
           "Animal: ", animal,
@@ -1693,8 +1690,6 @@ visualization_module_server <- function(id, rv, config) {
     generate_r_script <- function(df, response_var, plot_type, boxplot_mode,
                                   selected_zone, theme_choice, condition_order, condition_colors,
                                   extra_params = list()) {
-
-      `%||%` <- function(a, b) if (is.null(a)) b else a
 
       if (!plot_type %in% c("boxplot_periods", "boxplot_cumulate", "boxplot_delta", "lineplot")) {
         stop("generate_r_script() only supports XLSX plot types.")
@@ -1891,7 +1886,7 @@ visualization_module_server <- function(id, rv, config) {
           if (is.null(input$response_var) || !nzchar(input$response_var)) {
             p0 <- ggplot2::ggplot() +
               ggplot2::annotate("text", x = 0, y = 0, label = "Select a response variable") +
-              void_theme()
+              zebRabox:::void_theme()
             return(to_girafe(p0, width_svg = 12, height_svg = 9))
           }
 
@@ -1906,7 +1901,7 @@ visualization_module_server <- function(id, rv, config) {
           if (is.null(df) || !nrow(df)) {
             p0 <- ggplot2::ggplot() +
               ggplot2::annotate("text", x = 0, y = 0, label = "Generate datasets first") +
-              void_theme()
+              zebRabox:::void_theme()
             return(to_girafe(p0, width_svg = 12, height_svg = 9))
           }
 
@@ -1919,7 +1914,7 @@ visualization_module_server <- function(id, rv, config) {
             if (!length(zones)) {
               p0 <- ggplot2::ggplot() +
                 ggplot2::annotate("text", x = 0, y = 0, label = "No zones available") +
-                void_theme()
+                zebRabox:::void_theme()
               return(to_girafe(p0, width_svg = 12, height_svg = 9))
             }
             selected_zone <- as.character(zones[1])
@@ -1955,7 +1950,7 @@ visualization_module_server <- function(id, rv, config) {
           if (is.null(rv$txt_spatial_current) || !nrow(rv$txt_spatial_current)) {
             p0 <- ggplot2::ggplot() +
               ggplot2::annotate("text", x = 0, y = 0, label = "Generate a TXT dataset first") +
-              void_theme()
+              zebRabox:::void_theme()
             return(to_girafe(p0, width_svg = 12, height_svg = 9))
           }
 
@@ -1972,7 +1967,7 @@ visualization_module_server <- function(id, rv, config) {
           return(to_girafe(p, width_svg = 12, height_svg = 9))
         }
 
-        p0 <- ggplot2::ggplot() + void_theme()
+        p0 <- ggplot2::ggplot() + zebRabox:::void_theme()
         to_girafe(p0, width_svg = 12, height_svg = 9)
 
       }, error = function(e) {
@@ -1980,7 +1975,7 @@ visualization_module_server <- function(id, rv, config) {
 
         p_err <- ggplot2::ggplot() +
           ggplot2::annotate("text", x = 0, y = 0, label = "Figure generation failed") +
-          void_theme()
+          zebRabox:::void_theme()
 
         to_girafe(p_err, width_svg = 12, height_svg = 9)
       })
@@ -2008,7 +2003,7 @@ visualization_module_server <- function(id, rv, config) {
         wells <- txt_selected_wells()
         shiny::req(length(wells) > 0)
 
-        rng <- resolve_txt_time_range(
+        rng <- zebRabox:::resolve_txt_time_range(
           df = txt_base(),
           well_keys = wells,
           mode = input$txt_time_mode,
@@ -2017,7 +2012,7 @@ visualization_module_server <- function(id, rv, config) {
           period_value = input$txt_period_select
         )
 
-        df_txt <- build_txt_trajectory_df(
+        df_txt <- zebRabox:::build_txt_trajectory_df(
           df = txt_base(),
           well_keys = wells,
           time_range = rng,
@@ -2352,6 +2347,32 @@ visualization_module_server <- function(id, rv, config) {
         shiny::req(input$pct_table_var)
         tbl <- rv$percentage_tables_list[[input$pct_table_var]]
         if (!is.null(tbl)) openxlsx::write.xlsx(tbl, file)
+      }
+    )
+
+    output$download_all_variables <- shiny::downloadHandler(
+      filename = function() {
+        dtype <- switch(input$dataset_type,
+                        "Boxplot Periods"    = "periods",
+                        "Boxplot Cumulative" = "cumulative",
+                        "Boxplot Delta"      = "delta",
+                        "Lineplot"           = "lineplot",
+                        "dataset"
+        )
+        sprintf("%s_all_variables.xlsx", dtype)
+      },
+      content = function(file) {
+        df_list <- switch(
+          input$dataset_type,
+          "Boxplot Periods"    = rv$all_zone_combined_light_dark_boxplots,
+          "Boxplot Cumulative" = rv$all_zone_combined_cum_boxplots,
+          "Boxplot Delta"      = rv$all_zone_combined_delta_boxplots,
+          "Lineplot"           = rv$all_zone_combined_lineplots
+        )
+        shiny::req(df_list)
+        sheets <- Filter(Negate(is.null), df_list)
+        if (length(sheets) == 0) stop("No datasets available to export.")
+        openxlsx::write.xlsx(sheets, file)
       }
     )
 
@@ -3117,8 +3138,7 @@ visualization_module_server <- function(id, rv, config) {
         ctrl_cond <- if (identical(comp_type, "vs_control"))
                        isolate(input$stat_control_condition) else NULL
         samp_type <- isolate(input$stat_sample_type)
-        theme_fn  <- if (tolower(isolate(input$theme_switch)) == "light")
-                       light_theme else dark_theme
+        theme_fn  <- get_theme(isolate(input$theme_switch))$fn
 
         if (is.null(rvar) || !nzchar(rvar)) {
           log("❌ Statistics: select a response variable first.")

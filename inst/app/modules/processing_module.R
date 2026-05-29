@@ -64,9 +64,6 @@ processing_module_server <- function(id, rv, config) {
       config
     }
 
-    # ---- local helpers ----
-    `%||%` <- function(a, b) if (is.null(a)) b else a
-
     # ---- console aggregator ----
     console_messages <- shiny::reactiveVal(character())
     add_console_message <- function(message) {
@@ -93,7 +90,9 @@ processing_module_server <- function(id, rv, config) {
           period_df <- readxl::read_excel(input$period_file$datapath)
 
           shiny::incProgress(0.30, detail = "Validating required columns…")
-          shiny::req(all(c("start", "transition") %in% names(period_df)))
+          missing_cols <- setdiff(c("start", "transition"), names(period_df))
+          if (length(missing_cols) > 0)
+            stop(sprintf("Period file is missing required column(s): %s", paste(missing_cols, collapse = ", ")))
 
           shiny::incProgress(0.25, detail = "Converting & sorting…")
           period_df$start <- as.numeric(period_df$start)
@@ -139,7 +138,15 @@ processing_module_server <- function(id, rv, config) {
           }
 
           shiny::incProgress(0.20, detail = "Parsing plate_id…")
-          removal_df$plate_id <- suppressWarnings(as.numeric(gsub("Plate", "", removal_df$plate_id)))
+          raw_ids    <- as.character(removal_df$plate_id)
+          parsed_ids <- suppressWarnings(as.numeric(gsub("[^0-9]", "", raw_ids)))
+          bad        <- raw_ids[is.na(parsed_ids)]
+          if (length(bad) > 0)
+            add_console_message(sprintf(
+              "⚠️ Warning: Could not extract a numeric plate_id from: %s. Check the plate_id column format (expected e.g. 'Plate1', '1', 'plaque_2').",
+              paste(bad, collapse = ", ")
+            ))
+          removal_df$plate_id <- parsed_ids
 
           shiny::incProgress(0.00, detail = "Storing in memory…")
           rv$removal_df <- removal_df

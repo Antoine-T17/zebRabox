@@ -106,8 +106,6 @@ raw_data_ui <- function(
 raw_data_server <- function(id, rv) {
   shiny::moduleServer(id, function(input, output, session) {
 
-    `%||%` <- function(a, b) if (is.null(a)) b else a
-
     dt_options <- list(
       pageLength   = 25,
       autoWidth    = TRUE,

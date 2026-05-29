@@ -35,7 +35,7 @@ xlsx_base_name <- function(x) {
 #' @param df A data frame.
 #' @param cols Character vector of column names to convert.
 #' @return The data frame with specified columns converted to numeric.
-#' @export
+#' @keywords internal
 convert_numeric_cols <- function(df, cols) {
   for (col in intersect(names(df), cols)) {
     df[[col]] <- as.numeric(gsub(",", ".", as.character(df[[col]])))
@@ -67,7 +67,7 @@ convert_numeric_cols <- function(df, cols) {
 #'     \item{plan}{Updated plate plan with `condition_grouped` and
 #'       `condition_tagged` columns added (if they were absent).}
 #'   }
-#' @export
+#' @keywords internal
 generate_conditions <- function(current_data, current_plan, i,
                                 log_fn = function(msg) invisible(NULL)) {
   # Clean animal IDs from plan (strip _plate_N suffix) used as lookup keys
@@ -144,7 +144,7 @@ generate_conditions <- function(current_data, current_plan, i,
 #'     \item{boundaries}{Numeric vector of transition start times.}
 #'     \item{transitions}{Character vector of transition labels.}
 #'   }
-#' @export
+#' @keywords internal
 assign_periods <- function(current_data, period_df, i, cfg,
                            log_fn = function(msg) invisible(NULL)) {
   current_data$start <- as.numeric(current_data$start)
@@ -226,7 +226,7 @@ assign_periods <- function(current_data, period_df, i, cfg,
 #' @param i Integer plate index.
 #' @param log_fn Logging function.
 #' @return Updated data frame with matching rows removed.
-#' @export
+#' @keywords internal
 remove_time_codes <- function(current_data, removal_row, i,
                               log_fn = function(msg) invisible(NULL)) {
   log_fn("-")
@@ -277,7 +277,7 @@ remove_time_codes <- function(current_data, removal_row, i,
 #' @param i Integer plate index.
 #' @param log_fn Logging function.
 #' @return Updated data frame.
-#' @export
+#' @keywords internal
 remove_periods <- function(current_data, removal_row, i,
                            log_fn = function(msg) invisible(NULL)) {
   log_fn("-")
@@ -323,7 +323,7 @@ remove_periods <- function(current_data, removal_row, i,
 #' @param i Integer plate index.
 #' @param log_fn Logging function.
 #' @return Updated data frame.
-#' @export
+#' @keywords internal
 remove_wells <- function(current_data, removal_row, i,
                          log_fn = function(msg) invisible(NULL)) {
   log_fn("-")
@@ -371,7 +371,7 @@ remove_wells <- function(current_data, removal_row, i,
 #' @param i Integer plate index.
 #' @param log_fn Logging function.
 #' @return Updated data frame.
-#' @export
+#' @keywords internal
 remove_conditions <- function(current_data, removal_row, i,
                               log_fn = function(msg) invisible(NULL)) {
   log_fn("-")
@@ -427,7 +427,7 @@ remove_conditions <- function(current_data, removal_row, i,
 #' @param log_fn Logging function.
 #' @return Data frame with all zones row-bound, including a `zone`
 #'   column and only the columns listed in the standard output set.
-#' @export
+#' @keywords internal
 process_zones <- function(current_data, i, cfg,
                           log_fn = function(msg) invisible(NULL)) {
   log_fn("---")
@@ -512,7 +512,7 @@ process_zones <- function(current_data, i, cfg,
 #' @param log_fn Logging function.
 #' @return Data frame with columns `T`, `X`, `Y`, `file_txt_name`,
 #'   `animal`, and `zone`.
-#' @export
+#' @keywords internal
 match_txt_zip_to_raw_xlsx <- function(raw_xlsx, zip_txt, n = 6,
                                       log_fn = function(msg) invisible(NULL)) {
   needed_raw <- c("location", "animal", "an")
@@ -555,7 +555,7 @@ match_txt_zip_to_raw_xlsx <- function(raw_xlsx, zip_txt, n = 6,
     dplyr::left_join(raw_map, by = c("txt6" = "loc6"))
 
   txt2 |>
-    dplyr::select(.data$T, .data$X, .data$Y, .data$file_txt_name, .data$animal, .data$zone)
+    dplyr::select("T", "X", "Y", "file_txt_name", "animal", "zone")
 }
 
 # ----------------------------------------------------------------------
@@ -572,7 +572,7 @@ match_txt_zip_to_raw_xlsx <- function(raw_xlsx, zip_txt, n = 6,
 #' @param cfg Processing config list; may contain a `period_map` function.
 #' @return The data frame with `period_with_numbers` and
 #'   `period_without_numbers` columns added.
-#' @export
+#' @keywords internal
 assign_periods_to_txt <- function(txt_df, period_df, cfg) {
   txt_df$start <- suppressWarnings(as.numeric(txt_df$T))
   txt_df$period_with_numbers <- NA_character_
@@ -648,6 +648,8 @@ assign_periods_to_txt <- function(txt_df, period_df, cfg) {
 #'     \item{zip_xlsx_match}{(Only if `raw_zip_list` provided) ZIP↔XLSX
 #'       name-matching table.}
 #'   }
+#' @seealso [set_mode()], [read_raw_files()], [prepare_dataset()],
+#'   [export_results()]
 #' @export
 run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cfg,
                            raw_zip_list = NULL,
@@ -820,8 +822,8 @@ run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cf
 
       meta_k <- proc_k |>
         dplyr::select(
-          .data$plate_id, .data$animal,
-          .data$condition, .data$condition_grouped, .data$condition_tagged
+          "plate_id", "animal",
+          "condition", "condition_grouped", "condition_tagged"
         ) |>
         dplyr::mutate(
           animal            = trimws(as.character(.data$animal)),
@@ -874,10 +876,10 @@ run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cf
 
       txt_k <- txt_k |>
         dplyr::select(
-          .data$T, .data$X, .data$Y, .data$file_txt_name, .data$animal,
-          .data$plate_id, .data$condition, .data$condition_grouped, .data$condition_tagged,
-          .data$period_with_numbers, .data$period_without_numbers,
-          .data$zone
+          "T", "X", "Y", "file_txt_name", "animal",
+          "plate_id", "condition", "condition_grouped", "condition_tagged",
+          "period_with_numbers", "period_without_numbers",
+          "zone"
         )
 
       txt_by_plate[[plate_idx]] <- dplyr::bind_rows(txt_by_plate[[plate_idx]], txt_k)

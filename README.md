@@ -38,12 +38,12 @@ The number of raw files must match your plate plans.
 -   **Tracking mode**\
     Follows each subject’s path.\
     Yields distance moved, active time, and movement counts.\
-    See details in the [ZebraBox guide](inst/app/inputs/zebrabox_guidelines.pdf).
+    Refer to the guidelines provided by the supplier for details.
 
 -   **Quantization mode**\
     Counts pixel color changes.\
     Yields high, medium, or low activity levels.\
-    See details in the [ZebraBox guide](inst/app/inputs/zebrabox_guidelines.pdf).
+    Refer to the guidelines provided by the supplier for details.
 
 ### Choose Secondary Mode
 

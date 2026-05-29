@@ -332,13 +332,12 @@ header_styles <- shiny::tags$head(
 
 # Copy logos to www/
 file.copy("my_sticker_without_border.png", "www/my_sticker_without_border.png", overwrite = TRUE)
-file.copy("viewpoint_logo_remove_background.png", "www/viewpoint_logo_remove_background.png", overwrite = TRUE)
 
 # ======================================================================
 # 3) Dashboard Header
 # ======================================================================
 header_items <- shinydashboard::dashboardHeader(
-  title = "Zebrabox Treatment",
+  title = "zebRabox Package",
   shiny::tags$li(
     shiny::div(
       style = "display: flex; align-items: center; gap: 15px; margin-top: 6px; margin-right: 12px;",
@@ -398,7 +397,7 @@ welcome_content <- shinydashboard::tabItem(
   shiny::fluidRow(
     shiny::column(
       width = 12, align = "center",
-      shiny::h1("Welcome to Zebrabox Experiment Pipeline",
+      shiny::h1("Welcome to the zebRabox Shiny App",
                 style = "font-size: 2.4em; font-weight: 700; margin: 20px 0 8px 0;"),
       shiny::p("Generate randomized plate layouts, import and process raw data, and visualize results in multiple modes.",
                class = "welcome-subtitle",
@@ -406,15 +405,10 @@ welcome_content <- shinydashboard::tabItem(
 
       shiny::div(
         class = "fade-in logo-fade",
-        style = "display: flex; justify-content: center; align-items: center; gap: 60px; margin: 30px 0 60px 0; flex-wrap: wrap; opacity: 0;",
+        style = "display: flex; justify-content: center; align-items: center; margin: 30px 0 60px 0; opacity: 0;",
         shiny::a(href = "https://github.com/Antoine-T17/zebRabox/tree/main?tab=readme-ov-file#zebrabox--from-raw-data-to-interactive-visualization", target = "_blank",
                  shiny::tags$img(src = "my_sticker_without_border.png",
-                                 style = "height: 130px; width: auto; transition: transform 0.4s ease; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));",
-                                 onmouseover = "this.style.transform='scale(1.12)'",
-                                 onmouseout  = "this.style.transform='scale(1)'")),
-        shiny::a(href = "https://www.viewpoint.fr/", target = "_blank",
-                 shiny::tags$img(src = "viewpoint_logo_remove_background.png",
-                                 style = "height: 115px; width: auto; transition: transform 0.4s ease; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));",
+                                 style = "height: 150px; width: auto; transition: transform 0.4s ease; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));",
                                  onmouseover = "this.style.transform='scale(1.12)'",
                                  onmouseout  = "this.style.transform='scale(1)'"))
       )
@@ -464,14 +458,11 @@ global_footer <- shiny::tags$footer(
         class = "app-footer",
         shiny::HTML("
           <div>
-            Powered by
-            <a href='https://www.viewpoint.fr/' target='_blank'>ViewPoint Behavior Technology</a>
-            &nbsp;&nbsp;|&nbsp;&nbsp;
             Developed by
-            <a href='https://www.linkedin.com/in/antoine-tourret-b70672175/' target='_blank'>Antoine Tourret</a>
+            <a href='https://www.linkedin.com/in/antoine-tourret-b70672175/' target='_blank'>Antoine TOURRET</a>
           </div>
           <div style='margin-top: 8px; font-size: 0.9em;'>
-            © 2025 Zebrabox Pipeline • v1.1
+            &copy; 2026 zebRabox Shiny App
           </div>
         ")
       )

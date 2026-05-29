@@ -30,6 +30,21 @@ notify <- function(msg, type = c("message","warning","error"), duration = 6) {
   shiny::showNotification(msg, type = type, duration = duration)
 }
 
+# Null-coalesce operator — shared across all modules (removes need for local redefinitions)
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+# Theme helper — centralises the light/dark switch logic used in visualization_module
+# Returns: obj (ggplot2 theme result), fn (theme function ref), edge_col, is_light
+get_theme <- function(theme_choice) {
+  is_light <- tolower(as.character(theme_choice)) == "light"
+  list(
+    obj      = if (is_light) light_theme() else dark_theme(),
+    fn       = if (is_light) light_theme   else dark_theme,
+    edge_col = if (is_light) "black"       else "white",
+    is_light = is_light
+  )
+}
+
 # ======================================================================
 # Mode configuration factories — get_processing_config() and
 # get_visualization_config() are exported from the zebRabox package
