@@ -18,7 +18,7 @@ waiting_message_ui <- function() {
       ),
       shiny::icon("coffee", class = "fa-3x", style = "margin-top: 1em;"),
       shiny::div(style = "margin-bottom: 20px;"),  # spacing
-      shiny::p("Go fill them in the Raw Data Tab", style = "font-size: 1.2em;")
+      shiny::p("Go fill them in the Data Importation Tab", style = "font-size: 1.2em;")
     )
   )
 }

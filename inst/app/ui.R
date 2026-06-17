@@ -383,7 +383,7 @@ sidebar_content <- shinydashboard::dashboardSidebar(
   shinydashboard::sidebarMenu(
     shinydashboard::menuItem("Welcome",       tabName = "welcome",       icon = shiny::icon("home")),
     shinydashboard::menuItem("Plate Plan",    tabName = "plate_plan",    icon = shiny::icon("table")),
-    shinydashboard::menuItem("Raw Data",      tabName = "raw_data",      icon = shiny::icon("file-import")),
+    shinydashboard::menuItem("Data Importation", tabName = "data_importation", icon = shiny::icon("file-import")),
     shinydashboard::menuItem("Processing",    tabName = "processing",    icon = shiny::icon("gears")),
     shinydashboard::menuItem("Visualization", tabName = "visualization", icon = shiny::icon("chart-line"))
   )
@@ -479,7 +479,7 @@ dashboard_body <- shinydashboard::dashboardBody(
   shinydashboard::tabItems(
     welcome_content,
     shinydashboard::tabItem(tabName = "plate_plan",    plate_plan_ui("plate_plan")),
-    shinydashboard::tabItem(tabName = "raw_data",      raw_data_ui("raw_data")),
+    shinydashboard::tabItem(tabName = "data_importation", data_importation_ui("data_importation")),
     shinydashboard::tabItem(tabName = "processing",    shiny::uiOutput("processing_ui")),
     shinydashboard::tabItem(tabName = "visualization", shiny::uiOutput("visualization_ui"))
   ),

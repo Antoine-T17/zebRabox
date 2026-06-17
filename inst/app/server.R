@@ -51,7 +51,7 @@ server <- function(input, output, session) {
   # Always-Loaded Modules (created once per session)
   # ------------------------------------------------------------------
   plate_plan_server("plate_plan", rv)
-  raw_data_server("raw_data", rv)
+  data_importation_server("data_importation", rv)
 
   # ------------------------------------------------------------------
   # Helper Reactive: Build Mode Identifier
@@ -183,9 +183,9 @@ server <- function(input, output, session) {
     # Plate plan module fileInput
     shinyjs::reset("plate_plan-plate_plan_files")
 
-    # Raw data module fileInputs (xlsx + zip)
-    shinyjs::reset("raw_data-raw_xlsx_files")
-    shinyjs::reset("raw_data-raw_zip_files")
+    # Data importation module fileInputs (formatted data + raw data)
+    shinyjs::reset("data_importation-raw_xlsx_files")
+    shinyjs::reset("data_importation-raw_zip_files")
 
     # Processing module fileInputs (if module has been created, reset is still safe)
     shinyjs::reset("processing-period_file")
@@ -205,9 +205,9 @@ server <- function(input, output, session) {
     shiny::updateTextInput(session, "plate_plan-conditions_name",      value = "")
     shiny::updateTextInput(session, "plate_plan-plate_plan_name_xlsx", value = "plate_plan")
 
-    # ---- Reset modes (selectInputs live in raw_data module UI) ----
-    shiny::updateSelectInput(session, "raw_data-primary_mode",   selected = "")
-    shiny::updateSelectInput(session, "raw_data-secondary_mode", selected = "")
+    # ---- Reset modes (selectInputs live in data_importation module UI) ----
+    shiny::updateSelectInput(session, "data_importation-primary_mode",   selected = "")
+    shiny::updateSelectInput(session, "data_importation-secondary_mode", selected = "")
 
     notify("Application fully reset — please reload your plate plans, raw data and modes.", "message")
   })
