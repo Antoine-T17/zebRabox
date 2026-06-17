@@ -38,3 +38,12 @@ pkgdown/
 inst/doc/
 vignettes/*.html
 vignettes/*.pdf
+
+# Local data and internal files
+raw_txt/
+raw_xlsx/
+inst/app/backup/
+prompt_claude/
+v1_0/
+daphnia_trajectory_app/
+guidelines_zebrabox.pdf

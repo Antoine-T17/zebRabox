@@ -1,0 +1,111 @@
+url: ~
+template:
+  bootstrap: 5
+
+reference:
+
+  - title: "User API — Mode & configuration"
+    desc: >
+      Set the analysis mode and retrieve the corresponding processing and
+      visualization configurations. Always call `set_mode()` first.
+    contents:
+      - set_mode
+      - get_processing_config
+      - get_visualization_config
+
+  - title: "User API — Plate plan"
+    desc: >
+      Create a randomised plate plan or import one from Excel files.
+    contents:
+      - create_plate_plan
+      - read_plate_plan_files
+
+  - title: "User API — Data import"
+    desc: >
+      Read raw ZebraBox data files and construct the period-transition and
+      removal-specification tables required by `run_processing()`.
+    contents:
+      - read_raw_files
+      - read_raw_file
+      - create_period_table
+      - create_removal_table
+
+  - title: "User API — Processing"
+    desc: >
+      Run the full processing pipeline and extract its key outputs.
+    contents:
+      - run_processing
+      - prepare_dataset
+      - get_boundaries
+
+  - title: "User API — Visualization datasets"
+    desc: >
+      Build the analysis-ready data frames that feed the figure functions.
+    contents:
+      - prepare_all_zone
+      - build_periods_df
+      - build_cumulate_df
+      - build_lineplot_df
+      - build_delta_split
+
+  - title: "User API — Figures"
+    desc: >
+      Generate publication-ready ggplot2 figures from the processed dataset.
+    contents:
+      - plot_periods
+      - plot_cumulative
+      - plot_lineplot
+      - plot_delta
+      - light_theme
+      - dark_theme
+      - convert_time
+
+  - title: "User API — Export"
+    desc: >
+      Write processed results and figures to disk.
+    contents:
+      - export_results
+      - export_figures
+
+  - title: "Developer / Internal — Plate plan utilities"
+    desc: >
+      Low-level helpers used by the plate plan module and
+      `create_plate_plan()`. Exported for testability.
+    contents:
+      - detect_plate_type
+      - get_well_config
+      - parse_well_coords
+      - normalize_plate_conditions
+      - plate_condition_colors
+
+  - title: "Developer / Internal — Processing pipeline steps"
+    desc: >
+      Atomic pipeline steps called sequentially by `run_processing()`.
+      Exported for testability and advanced customisation.
+    contents:
+      - generate_conditions
+      - assign_periods
+      - remove_time_codes
+      - remove_periods
+      - remove_wells
+      - remove_conditions
+      - process_zones
+      - convert_numeric_cols
+
+  - title: "Developer / Internal — ZIP / TXT pipeline"
+    desc: >
+      Functions specific to the optional ZIP trajectory pipeline.
+    contents:
+      - match_txt_zip_to_raw_xlsx
+      - assign_periods_to_txt
+      - resolve_txt_selected_wells
+      - resolve_txt_time_range
+      - build_txt_trajectory_df
+
+  - title: "Developer / Internal — Helpers"
+    desc: >
+      Low-level utilities used internally by figure functions and the
+      Shiny application.
+    contents:
+      - ensure_colors
+      - void_theme
