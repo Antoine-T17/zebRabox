@@ -1,15 +1,14 @@
 #' Create a randomised plate plan
 #'
 #' Generates one or more randomised plate plans for ZebraBox experiments,
-#' distributing conditions and replicates equitably across plates while
-#' minimising positional bias.
+#' distributing each condition's wells evenly across plates (difference of
+#' at most one well per plate) while minimising positional bias.
 #'
 #' @param plate_type Wells per plate: \code{"12"}, \code{"24"}, \code{"48"},
 #'   or \code{"96"}.
 #' @param conditions Character vector of condition names
 #'   (e.g. \code{c("ctrl", "trt_A", "trt_B")}).
-#' @param n_replicates Integer. Number of replicates per condition.
-#' @param n_units Integer. Number of wells per replicate.
+#' @param n_units Integer. Number of wells (units) per condition.
 #' @param n_plates Integer. Number of plates to generate. Default \code{1}.
 #' @param include_borders Logical. \code{TRUE} (default) uses all wells;
 #'   \code{FALSE} excludes the outer ring of border wells from assignment
@@ -23,7 +22,7 @@
 #'   Each data frame contains:
 #'   \describe{
 #'     \item{animal}{Well identifier, e.g. \code{"A01_plate_1"}.}
-#'     \item{condition}{Assigned condition label (e.g. \code{"ctrl_1"}) or
+#'     \item{condition}{Assigned condition label (e.g. \code{"ctrl"}) or
 #'       \code{"X"} for unassigned / border wells.}
 #'     \item{plate_id}{Character plate index (\code{"1"}, \code{"2"}, …).}
 #'   }
@@ -36,8 +35,7 @@
 #' plans <- create_plate_plan(
 #'   plate_type      = "96",
 #'   conditions      = c("ctrl", "trt"),
-#'   n_replicates    = 3,
-#'   n_units         = 8,
+#'   n_units         = 24,
 #'   n_plates        = 2,
 #'   include_borders = FALSE,
 #'   seed            = 42
@@ -48,7 +46,6 @@
 create_plate_plan <- function(
     plate_type,
     conditions,
-    n_replicates,
     n_units,
     n_plates        = 1L,
     include_borders = TRUE,
@@ -64,65 +61,19 @@ create_plate_plan <- function(
   if (length(conditions) == 0 || any(!nzchar(trimws(conditions))))
     stop("'conditions' must be a non-empty character vector with no blank entries.")
 
-  n_replicates <- as.integer(n_replicates)
-  n_units      <- as.integer(n_units)
-  n_plates     <- as.integer(n_plates)
+  n_units  <- as.integer(n_units)
+  n_plates <- as.integer(n_plates)
 
-  if (is.na(n_replicates) || n_replicates < 1L) stop("'n_replicates' must be a positive integer.")
-  if (is.na(n_units)      || n_units < 1L)      stop("'n_units' must be a positive integer.")
-  if (is.na(n_plates)     || n_plates < 1L)      stop("'n_plates' must be a positive integer.")
+  if (is.na(n_units)  || n_units < 1L)  stop("'n_units' must be a positive integer.")
+  if (is.na(n_plates) || n_plates < 1L) stop("'n_plates' must be a positive integer.")
 
   # ---- Plate geometry --------------------------------------------------------
-  well_configs <- list(
-    "12" = list(
-      rows   = LETTERS[1:3],
-      cols   = 1:4,
-      border = c("A01","A02","A03","A04",
-                 "B01","B04",
-                 "C01","C02","C03","C04")
-    ),
-    "24" = list(
-      rows   = LETTERS[1:4],
-      cols   = 1:6,
-      border = c("A01","A02","A03","A04","A05","A06",
-                 "B01","B06",
-                 "C01","C06",
-                 "D01","D02","D03","D04","D05","D06")
-    ),
-    "48" = list(
-      rows   = LETTERS[1:6],
-      cols   = 1:8,
-      border = c("A01","A02","A03","A04","A05","A06","A07","A08",
-                 "B01","B08",
-                 "C01","C08",
-                 "D01","D08",
-                 "E01","E08",
-                 "F01","F02","F03","F04","F05","F06","F07","F08")
-    ),
-    "96" = list(
-      rows   = LETTERS[1:8],
-      cols   = 1:12,
-      border = c(
-        paste0("A", sprintf("%02d", 1:12)),
-        paste0(rep(c("B","C","D","E","F","G"), each = 2), sprintf("%02d", c(1, 12))),
-        paste0("H", sprintf("%02d", 1:12))
-      )
-    )
-  )
-  cfg <- well_configs[[plate_type]]
-
-  wells_template <- with(
-    expand.grid(Row = cfg$rows, Column = cfg$cols),
-    paste0(Row, sprintf("%02d", Column))
-  )
-
-  available_wells <- if (!isTRUE(include_borders))
-    setdiff(wells_template, cfg$border)
-  else
-    wells_template
+  cfg             <- plate_well_configs(plate_type)
+  wells_template  <- plate_wells_template(plate_type)
+  available_wells <- plate_available_wells(plate_type, include_borders)
 
   available_total <- length(available_wells) * n_plates
-  total_units     <- length(conditions) * n_replicates * n_units
+  total_units     <- length(conditions) * n_units
 
   if (total_units > available_total)
     stop(sprintf(
@@ -131,15 +82,35 @@ create_plate_plan <- function(
     ))
 
   # ---- Distribute conditions evenly across plates ----------------------------
+  # Each condition's wells are split across plates as evenly as possible
+  # (at most one well of difference between plates).
   cond_by_plate <- lapply(conditions, function(cond) {
-    total_c <- n_replicates * n_units
-    base    <- floor(total_c / n_plates)
-    rem     <- total_c %% n_plates
+    base    <- floor(n_units / n_plates)
+    rem     <- n_units %% n_plates
     counts  <- rep(base, n_plates)
     if (rem > 0L) counts[seq_len(rem)] <- counts[seq_len(rem)] + 1L
     counts
   })
   names(cond_by_plate) <- conditions
+
+  # Flat label sequence per condition: the condition name repeated n_units times.
+  full_labels <- lapply(conditions, function(cond) rep(cond, n_units))
+  names(full_labels) <- conditions
+
+  # Slice each condition's label sequence across plates using cond_by_plate.
+  # This guarantees every unit is placed on exactly one plate.
+  labels_by_plate <- vector("list", n_plates)
+  for (cond in conditions) {
+    counts <- cond_by_plate[[cond]]
+    ends   <- cumsum(counts)
+    starts <- c(1L, ends[-length(ends)] + 1L)
+    lbl    <- full_labels[[cond]]
+    for (i in seq_len(n_plates)) {
+      if (counts[i] > 0L) {
+        labels_by_plate[[i]] <- c(labels_by_plate[[i]], lbl[starts[i]:ends[i]])
+      }
+    }
+  }
 
   # avail_idx is constant across plates — computed once
   avail_idx <- if (!isTRUE(include_borders))
@@ -154,18 +125,7 @@ create_plate_plan <- function(
 
   for (i in seq_len(n_plates)) {
 
-    labels <- unlist(mapply(
-      function(cond, counts) {
-        unlist(mapply(
-          function(r, cnt) rep(paste0(cond, "_", r), cnt),
-          seq_len(n_replicates),
-          rep(counts[i] / n_replicates, n_replicates),
-          SIMPLIFY = FALSE
-        ))
-      },
-      conditions, cond_by_plate,
-      SIMPLIFY = FALSE
-    ))
+    labels <- labels_by_plate[[i]]
 
     plate_assign             <- rep("X", length(wells_template))
     choice_idx               <- sample(avail_idx, length(labels))
@@ -208,6 +168,183 @@ detect_plate_type <- function(df) {
   if (total %in% c(12L, 24L, 48L, 96L)) as.integer(total) else NA_integer_
 }
 
+#' Plate geometry configuration (rows, columns, border wells)
+#'
+#' Single source of truth for plate layout, used by [create_plate_plan()],
+#' [get_well_config()], [plate_wells_template()], [plate_available_wells()]
+#' and [min_plates_needed()].
+#'
+#' @param plate_type Character (or integer coercible to character):
+#'   `"12"`, `"24"`, `"48"`, or `"96"`.
+#' @return Named list with `rows` (character vector of row letters), `cols`
+#'   (integer vector of column indices) and `border` (character vector of
+#'   border well IDs, e.g. `"A01"`).
+#' @keywords internal
+plate_well_configs <- function(plate_type) {
+  plate_type <- as.character(plate_type)
+  configs <- list(
+    "12" = list(
+      rows   = LETTERS[1:3],
+      cols   = 1:4,
+      border = c("A01","A02","A03","A04",
+                 "B01","B04",
+                 "C01","C02","C03","C04")
+    ),
+    "24" = list(
+      rows   = LETTERS[1:4],
+      cols   = 1:6,
+      border = c("A01","A02","A03","A04","A05","A06",
+                 "B01","B06",
+                 "C01","C06",
+                 "D01","D02","D03","D04","D05","D06")
+    ),
+    "48" = list(
+      rows   = LETTERS[1:6],
+      cols   = 1:8,
+      border = c("A01","A02","A03","A04","A05","A06","A07","A08",
+                 "B01","B08",
+                 "C01","C08",
+                 "D01","D08",
+                 "E01","E08",
+                 "F01","F02","F03","F04","F05","F06","F07","F08")
+    ),
+    "96" = list(
+      rows   = LETTERS[1:8],
+      cols   = 1:12,
+      border = c(
+        paste0("A", sprintf("%02d", 1:12)),
+        paste0(rep(c("B","C","D","E","F","G"), each = 2), sprintf("%02d", c(1, 12))),
+        paste0("H", sprintf("%02d", 1:12))
+      )
+    )
+  )
+  cfg <- configs[[plate_type]]
+  if (is.null(cfg))
+    stop("'plate_type' must be one of: \"12\", \"24\", \"48\", \"96\".")
+  cfg
+}
+
+#' All well identifiers for a plate format, in row-major order
+#'
+#' @inheritParams plate_well_configs
+#' @return Character vector of well IDs (e.g. `"A01"`, `"A02"`, ...).
+#' @keywords internal
+plate_wells_template <- function(plate_type) {
+  cfg <- plate_well_configs(plate_type)
+  with(
+    expand.grid(Row = cfg$rows, Column = cfg$cols),
+    paste0(Row, sprintf("%02d", Column))
+  )
+}
+
+#' Wells available for assignment on a plate
+#'
+#' @inheritParams plate_well_configs
+#' @param include_borders Logical. `TRUE` (default) returns all wells;
+#'   `FALSE` excludes the outer ring of border wells.
+#' @return Character vector of available well IDs.
+#' @keywords internal
+plate_available_wells <- function(plate_type, include_borders = TRUE) {
+  cfg   <- plate_well_configs(plate_type)
+  wells <- plate_wells_template(plate_type)
+  if (!isTRUE(include_borders)) setdiff(wells, cfg$border) else wells
+}
+
+#' Minimum number of plates needed for a plate plan
+#'
+#' Computes how many plates are required to hold every requested condition
+#' unit, given the plate format and whether border wells are excluded. Used
+#' to offer plate-count compaction after an over-provisioned generation
+#' (e.g. a "Compact Plates" action in the Shiny app) — see
+#' [create_plate_plan()].
+#'
+#' @inheritParams create_plate_plan
+#' @return Integer scalar: the minimum feasible `n_plates`.
+#' @keywords internal
+min_plates_needed <- function(plate_type, conditions, n_units, include_borders = TRUE) {
+  available_wells <- plate_available_wells(plate_type, include_borders)
+  total_units     <- length(conditions) * as.integer(n_units)
+  as.integer(ceiling(total_units / length(available_wells)))
+}
+
+#' Find a plate able to absorb every later plate's assigned wells
+#'
+#' Scans plates in order and returns the first plate index \code{n} such
+#' that every assigned well (i.e. not \code{"X"}) on plates
+#' \code{n + 1, n + 2, ..., length(plate_list)} fits into plate \code{n}'s
+#' currently unassigned, assignable wells. Used to drive the "Compact
+#' Plates" action in the Shiny app: rather than re-randomising a whole new
+#' layout, the trailing plates' existing wells are physically relocated
+#' onto plate \code{n}.
+#'
+#' @param plate_list List of plate plan data frames (as returned by
+#'   [create_plate_plan()]), in plate order. Each must have a \code{condition}
+#'   column.
+#' @inheritParams create_plate_plan
+#' @return Integer plate index \code{n}, or \code{NA_integer_} if no plate
+#'   can absorb all the plates after it.
+#' @keywords internal
+find_compaction_target <- function(plate_list, plate_type, include_borders = TRUE) {
+  n_plates <- length(plate_list)
+  if (n_plates < 2L) return(NA_integer_)
+
+  wells_template <- plate_wells_template(plate_type)
+  avail_idx <- if (!isTRUE(include_borders))
+    which(!wells_template %in% plate_well_configs(plate_type)$border)
+  else
+    seq_along(wells_template)
+
+  assigned_counts <- vapply(plate_list, function(df) sum(df$condition != "X"), integer(1))
+
+  for (n in seq_len(n_plates - 1L)) {
+    free_n <- sum(plate_list[[n]]$condition[avail_idx] == "X")
+    rest   <- sum(assigned_counts[(n + 1L):n_plates])
+    if (rest <= free_n) return(as.integer(n))
+  }
+  NA_integer_
+}
+
+#' Compact a list of plate plans by relocating trailing plates
+#'
+#' Uses [find_compaction_target()] to find a plate able to absorb every
+#' assigned well from the plates after it, then moves those wells onto its
+#' free, assignable wells and drops the now-empty trailing plates. Existing
+#' assignments — on the target plate and on any plates before it — are left
+#' untouched. Returns \code{plate_list} unchanged if no compaction is
+#' possible.
+#'
+#' @inheritParams find_compaction_target
+#' @param seed Numeric. Random seed used to place the relocated wells.
+#' @return A list of plate plan data frames, the same length as
+#'   \code{plate_list} or shorter.
+#' @keywords internal
+compact_plate_plans <- function(plate_list, plate_type, include_borders = TRUE, seed = 42) {
+  target <- find_compaction_target(plate_list, plate_type, include_borders)
+  if (is.na(target)) return(plate_list)
+
+  wells_template <- plate_wells_template(plate_type)
+  avail_idx <- if (!isTRUE(include_borders))
+    which(!wells_template %in% plate_well_configs(plate_type)$border)
+  else
+    seq_along(wells_template)
+
+  merged_df <- plate_list[[target]]
+  free_idx  <- avail_idx[merged_df$condition[avail_idx] == "X"]
+
+  extra_labels <- unlist(lapply(
+    plate_list[(target + 1L):length(plate_list)],
+    function(df) df$condition[df$condition != "X"]
+  ))
+
+  set.seed(seed)
+  chosen <- sample(free_idx, length(extra_labels))
+  merged_df$condition[chosen] <- extra_labels
+
+  result <- plate_list[seq_len(target)]
+  result[[target]] <- merged_df
+  result
+}
+
 #' Return row/column layout for a given plate format
 #'
 #' @param plate_type Character (or integer coercible to character):
@@ -219,16 +356,8 @@ detect_plate_type <- function(df) {
 #'   }
 #' @keywords internal
 get_well_config <- function(plate_type) {
-  configs <- list(
-    "12" = list(rows = LETTERS[1:3],  cols = 1:4),
-    "24" = list(rows = LETTERS[1:4],  cols = 1:6),
-    "48" = list(rows = LETTERS[1:6],  cols = 1:8),
-    "96" = list(rows = LETTERS[1:8],  cols = 1:12)
-  )
-  cfg <- configs[[as.character(plate_type)]]
-  if (is.null(cfg))
-    stop("'plate_type' must be one of: \"12\", \"24\", \"48\", \"96\".")
-  cfg
+  cfg <- plate_well_configs(plate_type)
+  list(rows = cfg$rows, cols = cfg$cols)
 }
 
 #' Add well coordinate columns to a plate plan data frame

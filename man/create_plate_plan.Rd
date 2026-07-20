@@ -7,7 +7,6 @@
 create_plate_plan(
   plate_type,
   conditions,
-  n_replicates,
   n_units,
   n_plates = 1L,
   include_borders = TRUE,
@@ -22,9 +21,7 @@ or \code{"96"}.}
 \item{conditions}{Character vector of condition names
 (e.g. \code{c("ctrl", "trt_A", "trt_B")}).}
 
-\item{n_replicates}{Integer. Number of replicates per condition.}
-
-\item{n_units}{Integer. Number of wells per replicate.}
+\item{n_units}{Integer. Number of wells (units) per condition.}
 
 \item{n_plates}{Integer. Number of plates to generate. Default \code{1}.}
 
@@ -43,7 +40,7 @@ A named list of \code{n_plates} data frames, one per plate.
 Each data frame contains:
 \describe{
 \item{animal}{Well identifier, e.g. \code{"A01_plate_1"}.}
-\item{condition}{Assigned condition label (e.g. \code{"ctrl_1"}) or
+\item{condition}{Assigned condition label (e.g. \code{"ctrl"}) or
 \code{"X"} for unassigned / border wells.}
 \item{plate_id}{Character plate index (\code{"1"}, \code{"2"}, …).}
 }
@@ -52,15 +49,14 @@ The \code{file_name} attribute of each data frame is set to
 }
 \description{
 Generates one or more randomised plate plans for ZebraBox experiments,
-distributing conditions and replicates equitably across plates while
-minimising positional bias.
+distributing each condition's wells evenly across plates (difference of
+at most one well per plate) while minimising positional bias.
 }
 \examples{
 plans <- create_plate_plan(
   plate_type      = "96",
   conditions      = c("ctrl", "trt"),
-  n_replicates    = 3,
-  n_units         = 8,
+  n_units         = 24,
   n_plates        = 2,
   include_borders = FALSE,
   seed            = 42

@@ -26,13 +26,12 @@ cfg <- set_mode("tracking", "light_dark")
 
 
 # ── PLATE PLAN ────────────────────────────────────────────────────────
-# create_plate_plan(plate_type, conditions, n_replicates, n_units,
+# create_plate_plan(plate_type, conditions, n_units,
 #                   n_plates, include_borders, seed, name)
 plates <- create_plate_plan(
   plate_type   = "96",     # "12" | "24" | "48" | "96"
   conditions   = c("ctrl", "trt"),
-  n_replicates = 4,        # replicates per condition
-  n_units      = 6,        # animals per replicate
+  n_units      = 24,       # animals per condition
   n_plates     = 2,
   seed         = 42
 )

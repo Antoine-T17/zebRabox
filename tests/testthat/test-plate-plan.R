@@ -26,24 +26,24 @@ border_12 <- c("A01","A02","A03","A04","B01","B04","C01","C02","C03","C04")
 # =============================================================================
 
 test_that("returns a list", {
-  plans <- create_plate_plan("96", c("ctrl", "trt"), 1, 4)
+  plans <- create_plate_plan("96", c("ctrl", "trt"), 4)
   expect_type(plans, "list")
 })
 
 test_that("list length equals n_plates", {
   for (n in c(1, 2, 3)) {
-    plans <- create_plate_plan("96", c("ctrl"), 1, 1, n_plates = n)
+    plans <- create_plate_plan("96", c("ctrl"), 1, n_plates = n)
     expect_length(plans, n)
   }
 })
 
 test_that("each element is a data frame", {
-  plans <- create_plate_plan("96", c("ctrl", "trt"), 1, 4, n_plates = 2)
+  plans <- create_plate_plan("96", c("ctrl", "trt"), 4, n_plates = 2)
   for (df in plans) expect_s3_class(df, "data.frame")
 })
 
 test_that("each data frame has exactly the required columns", {
-  plans <- create_plate_plan("48", c("ctrl", "trt"), 1, 4)
+  plans <- create_plate_plan("48", c("ctrl", "trt"), 4)
   expect_named(plans[[1]], c("animal", "condition", "plate_id"))
 })
 
@@ -52,22 +52,22 @@ test_that("each data frame has exactly the required columns", {
 # =============================================================================
 
 test_that("96-well plate has 96 rows", {
-  plans <- create_plate_plan("96", c("ctrl"), 1, 1)
+  plans <- create_plate_plan("96", c("ctrl"), 1)
   expect_equal(nrow(plans[[1]]), 96L)
 })
 
 test_that("48-well plate has 48 rows", {
-  plans <- create_plate_plan("48", c("ctrl"), 1, 1)
+  plans <- create_plate_plan("48", c("ctrl"), 1)
   expect_equal(nrow(plans[[1]]), 48L)
 })
 
 test_that("24-well plate has 24 rows", {
-  plans <- create_plate_plan("24", c("ctrl"), 1, 1)
+  plans <- create_plate_plan("24", c("ctrl"), 1)
   expect_equal(nrow(plans[[1]]), 24L)
 })
 
 test_that("12-well plate has 12 rows", {
-  plans <- create_plate_plan("12", c("ctrl"), 1, 1)
+  plans <- create_plate_plan("12", c("ctrl"), 1)
   expect_equal(nrow(plans[[1]]), 12L)
 })
 
@@ -76,7 +76,7 @@ test_that("12-well plate has 12 rows", {
 # =============================================================================
 
 test_that("animal column follows <well>_plate_<i> format", {
-  plans <- create_plate_plan("12", c("ctrl"), 1, 1, n_plates = 2)
+  plans <- create_plate_plan("12", c("ctrl"), 1, n_plates = 2)
   expect_true(all(grepl("^[A-C]\\d{2}_plate_1$", plans[[1]]$animal)))
   expect_true(all(grepl("^[A-C]\\d{2}_plate_2$", plans[[2]]$animal)))
 })
@@ -86,12 +86,12 @@ test_that("animal column follows <well>_plate_<i> format", {
 # =============================================================================
 
 test_that("plate_id matches plate index", {
-  plans <- create_plate_plan("96", c("ctrl"), 1, 1, n_plates = 3)
+  plans <- create_plate_plan("96", c("ctrl"), 1, n_plates = 3)
   for (i in 1:3) expect_true(all(plans[[i]]$plate_id == as.character(i)))
 })
 
 test_that("plate_id is stored as character", {
-  plans <- create_plate_plan("96", c("ctrl"), 1, 1)
+  plans <- create_plate_plan("96", c("ctrl"), 1)
   expect_type(plans[[1]]$plate_id, "character")
 })
 
@@ -100,13 +100,13 @@ test_that("plate_id is stored as character", {
 # =============================================================================
 
 test_that("file_name attribute follows <name>_plate_<i>.xlsx", {
-  plans <- create_plate_plan("96", c("ctrl"), 1, 1, n_plates = 2, name = "exp1")
+  plans <- create_plate_plan("96", c("ctrl"), 1, n_plates = 2, name = "exp1")
   expect_equal(attr(plans[[1]], "file_name"), "exp1_plate_1.xlsx")
   expect_equal(attr(plans[[2]], "file_name"), "exp1_plate_2.xlsx")
 })
 
 test_that("default name is 'plate_plan'", {
-  plans <- create_plate_plan("96", c("ctrl"), 1, 1)
+  plans <- create_plate_plan("96", c("ctrl"), 1)
   expect_equal(attr(plans[[1]], "file_name"), "plate_plan_plate_1.xlsx")
 })
 
@@ -114,28 +114,28 @@ test_that("default name is 'plate_plan'", {
 # 6. Assigned well count
 # =============================================================================
 
-test_that("total assigned wells matches conditions × replicates × units", {
-  # 2 conditions × 3 replicates × 4 units = 24 assigned wells
-  plans <- create_plate_plan("96", c("ctrl", "trt"), 3, 4, seed = 1)
+test_that("total assigned wells matches conditions × units", {
+  # 2 conditions × 12 units = 24 assigned wells
+  plans <- create_plate_plan("96", c("ctrl", "trt"), 12, seed = 1)
   n_assigned <- sum(plans[[1]]$condition != "X")
   expect_equal(n_assigned, 24L)
 })
 
 test_that("unassigned wells are labelled X", {
-  plans <- create_plate_plan("96", c("ctrl"), 1, 1, seed = 1)
+  plans <- create_plate_plan("96", c("ctrl"), 1, seed = 1)
   cond_vals <- unique(plans[[1]]$condition)
   expect_true("X" %in% cond_vals)
-  expect_true(all(plans[[1]]$condition %in% c("X", "ctrl_1")))
+  expect_true(all(plans[[1]]$condition %in% c("X", "ctrl")))
 })
 
 # =============================================================================
 # 7. Condition label format
 # =============================================================================
 
-test_that("condition labels follow <condition>_<replicate> format", {
-  plans <- create_plate_plan("96", c("ctrl", "trt"), 2, 4, seed = 42)
+test_that("condition labels are the bare condition name (no replicate suffix)", {
+  plans <- create_plate_plan("96", c("ctrl", "trt"), 8, seed = 42)
   assigned <- plans[[1]]$condition[plans[[1]]$condition != "X"]
-  expect_true(all(grepl("^(ctrl|trt)_[12]$", assigned)))
+  expect_true(all(assigned %in% c("ctrl", "trt")))
 })
 
 # =============================================================================
@@ -143,14 +143,14 @@ test_that("condition labels follow <condition>_<replicate> format", {
 # =============================================================================
 
 test_that("same seed produces identical output", {
-  p1 <- create_plate_plan("96", c("ctrl", "trt"), 2, 4, seed = 42)
-  p2 <- create_plate_plan("96", c("ctrl", "trt"), 2, 4, seed = 42)
+  p1 <- create_plate_plan("96", c("ctrl", "trt"), 8, seed = 42)
+  p2 <- create_plate_plan("96", c("ctrl", "trt"), 8, seed = 42)
   expect_identical(p1[[1]]$condition, p2[[1]]$condition)
 })
 
 test_that("different seeds produce different condition assignments", {
-  p1 <- create_plate_plan("96", c("ctrl", "trt"), 2, 4, seed = 1)
-  p2 <- create_plate_plan("96", c("ctrl", "trt"), 2, 4, seed = 2)
+  p1 <- create_plate_plan("96", c("ctrl", "trt"), 8, seed = 1)
+  p2 <- create_plate_plan("96", c("ctrl", "trt"), 8, seed = 2)
   expect_false(identical(p1[[1]]$condition, p2[[1]]$condition))
 })
 
@@ -159,7 +159,7 @@ test_that("different seeds produce different condition assignments", {
 # =============================================================================
 
 test_that("border wells are unassigned when include_borders = FALSE (96)", {
-  plans <- create_plate_plan("96", c("ctrl", "trt"), 2, 4,
+  plans <- create_plate_plan("96", c("ctrl", "trt"), 8,
                              include_borders = FALSE, seed = 42)
   df <- plans[[1]]
   border_animal <- paste0(border_96, "_plate_1")
@@ -168,7 +168,7 @@ test_that("border wells are unassigned when include_borders = FALSE (96)", {
 })
 
 test_that("border wells are unassigned when include_borders = FALSE (48)", {
-  plans <- create_plate_plan("48", c("ctrl"), 1, 4,
+  plans <- create_plate_plan("48", c("ctrl"), 4,
                              include_borders = FALSE, seed = 1)
   df <- plans[[1]]
   border_animal <- paste0(border_48, "_plate_1")
@@ -178,7 +178,7 @@ test_that("border wells are unassigned when include_borders = FALSE (48)", {
 
 test_that("include_borders = TRUE allows assignment to border wells", {
   # With seed = 1, at least one border well should be assigned in a dense plan
-  plans <- create_plate_plan("96", c("ctrl"), 1, 60,
+  plans <- create_plate_plan("96", c("ctrl"), 60,
                              include_borders = TRUE, seed = 1)
   df <- plans[[1]]
   border_animal <- paste0(border_96, "_plate_1")
@@ -191,7 +191,7 @@ test_that("include_borders = TRUE allows assignment to border wells", {
 # =============================================================================
 
 test_that("conditions are distributed across plates (not all on one plate)", {
-  plans <- create_plate_plan("96", c("ctrl", "trt"), 2, 4,
+  plans <- create_plate_plan("96", c("ctrl", "trt"), 8,
                              n_plates = 3, seed = 42)
   for (i in seq_along(plans)) {
     assigned <- plans[[i]]$condition[plans[[i]]$condition != "X"]
@@ -201,9 +201,9 @@ test_that("conditions are distributed across plates (not all on one plate)", {
 })
 
 test_that("total assigned wells across all plates is correct", {
-  # total = n_conditions × n_replicates × n_units = 2 × 2 × 4 = 16
+  # total = n_conditions × n_units = 2 × 8 = 16
   # distributed across 2 plates (n_plates=2 divides evenly: 8 per plate)
-  plans <- create_plate_plan("96", c("ctrl", "trt"), 2, 4,
+  plans <- create_plate_plan("96", c("ctrl", "trt"), 8,
                              n_plates = 2, seed = 1)
   total <- sum(sapply(plans, function(df) sum(df$condition != "X")))
   expect_equal(total, 16L)
@@ -215,42 +215,35 @@ test_that("total assigned wells across all plates is correct", {
 
 test_that("invalid plate_type raises an error", {
   expect_error(
-    create_plate_plan("100", c("ctrl"), 1, 1),
+    create_plate_plan("100", c("ctrl"), 1),
     regexp = "plate_type"
   )
 })
 
 test_that("blank condition name raises an error", {
   expect_error(
-    create_plate_plan("96", c("ctrl", ""), 1, 1),
+    create_plate_plan("96", c("ctrl", ""), 1),
     regexp = "blank"
   )
 })
 
 test_that("empty conditions vector raises an error", {
   expect_error(
-    create_plate_plan("96", character(0), 1, 1),
+    create_plate_plan("96", character(0), 1),
     regexp = "conditions"
-  )
-})
-
-test_that("n_replicates < 1 raises an error", {
-  expect_error(
-    create_plate_plan("96", c("ctrl"), 0, 1),
-    regexp = "n_replicates"
   )
 })
 
 test_that("n_units < 1 raises an error", {
   expect_error(
-    create_plate_plan("96", c("ctrl"), 1, 0),
+    create_plate_plan("96", c("ctrl"), 0),
     regexp = "n_units"
   )
 })
 
 test_that("n_plates < 1 raises an error", {
   expect_error(
-    create_plate_plan("96", c("ctrl"), 1, 1, n_plates = 0),
+    create_plate_plan("96", c("ctrl"), 1, n_plates = 0),
     regexp = "n_plates"
   )
 })
@@ -258,7 +251,7 @@ test_that("n_plates < 1 raises an error", {
 test_that("exceeding available wells raises an error", {
   # 12-well plate: 12 wells, requesting 13 units
   expect_error(
-    create_plate_plan("12", c("ctrl"), 1, 13),
+    create_plate_plan("12", c("ctrl"), 13),
     regexp = "exceed available wells"
   )
 })
@@ -266,7 +259,7 @@ test_that("exceeding available wells raises an error", {
 test_that("exceeding available non-border wells raises an error", {
   # 96-well plate: 60 interior wells, request 61
   expect_error(
-    create_plate_plan("96", c("ctrl"), 1, 61, include_borders = FALSE),
+    create_plate_plan("96", c("ctrl"), 61, include_borders = FALSE),
     regexp = "exceed available wells"
   )
 })
@@ -320,8 +313,7 @@ test_that("output is identical to original generate_plate_plan_shiny", {
     plate_type           = "96",
     conditions_number    = 2L,
     conditions_name      = c("ctrl", "trt"),
-    replicates_number    = 3L,
-    units_per_replicate  = 8L,
+    units_per_condition  = 24L,
     plate_number         = 2L,
     keep_border_wells    = "no",
     seed_value           = 42,
@@ -333,8 +325,7 @@ test_that("output is identical to original generate_plate_plan_shiny", {
   new_res <- create_plate_plan(
     plate_type      = "96",
     conditions      = c("ctrl", "trt"),
-    n_replicates    = 3L,
-    n_units         = 8L,
+    n_units         = 24L,
     n_plates        = 2L,
     include_borders = FALSE,
     seed            = 42,
@@ -405,7 +396,7 @@ test_that("detect_plate_type returns NA_integer_ for unknown layout", {
 })
 
 test_that("detect_plate_type works for plate plans from create_plate_plan", {
-  plans <- create_plate_plan("96", c("ctrl"), 1, 1)
+  plans <- create_plate_plan("96", c("ctrl"), 1)
   expect_equal(zebRabox:::detect_plate_type(plans[[1]]), 96L)
 })
 
@@ -484,7 +475,7 @@ test_that("parse_well_coords preserves existing columns", {
 })
 
 test_that("parse_well_coords works on create_plate_plan output", {
-  plans  <- create_plate_plan("96", c("ctrl"), 1, 1)
+  plans  <- create_plate_plan("96", c("ctrl"), 1)
   result <- zebRabox:::parse_well_coords(plans[[1]])
   expect_true(all(result$Row %in% LETTERS[1:8]))
   expect_true(all(result$Column %in% 1:12))
@@ -523,7 +514,7 @@ test_that("normalize_plate_conditions handles Condition_Base column", {
 })
 
 test_that("normalize_plate_conditions works on create_plate_plan output", {
-  plans  <- create_plate_plan("24", c("ctrl", "trt"), 1, 3, seed = 1)
+  plans  <- create_plate_plan("24", c("ctrl", "trt"), 3, seed = 1)
   result <- zebRabox:::normalize_plate_conditions(plans[[1]])
   expect_true("Condition" %in% names(result))
   expect_true(all(result$Condition %in% c("ctrl", "trt", "X")))
@@ -652,4 +643,105 @@ test_that("read_plate_plan_files: explicit and default names produce identical d
   r_default  <- read_plate_plan_files(tmp)
   expect_equal(r_explicit[[1]]$animal,          r_default[[1]]$animal)
   expect_equal(attr(r_explicit[[1]], "file_name"), attr(r_default[[1]], "file_name"))
+})
+
+# =============================================================================
+# 19. find_compaction_target / compact_plate_plans
+# =============================================================================
+
+# Uses the package's own well ordering (column-major: A01 B01 C01 A02 B02 ...)
+# so indices line up with what find_compaction_target()/compact_plate_plans()
+# compute internally. Interior (non-border) wells for "12" are B02 and B03.
+make_synthetic_plate <- function(condition, plate_id = "1", file_name = NULL) {
+  wells <- zebRabox:::plate_wells_template("12")
+  df <- data.frame(
+    animal    = paste0(wells, "_plate_", plate_id),
+    condition = condition,
+    plate_id  = plate_id,
+    stringsAsFactors = FALSE
+  )
+  if (!is.null(file_name)) attr(df, "file_name") <- file_name
+  df
+}
+
+test_that("find_compaction_target returns NA with fewer than 2 plates", {
+  p <- list(make_synthetic_plate(rep("X", 12)))
+  expect_true(is.na(zebRabox:::find_compaction_target(p, "12", TRUE)))
+})
+
+test_that("find_compaction_target returns NA when nothing fits", {
+  p1 <- make_synthetic_plate(rep("ctrl", 12), plate_id = "1")
+  p2 <- make_synthetic_plate(c("ctrl", rep("X", 11)), plate_id = "2")
+  expect_true(is.na(zebRabox:::find_compaction_target(list(p1, p2), "12", TRUE)))
+})
+
+test_that("find_compaction_target finds plate 1 when it can absorb the rest", {
+  p1 <- make_synthetic_plate(c("ctrl", "ctrl", rep("X", 10)), plate_id = "1")
+  p2 <- make_synthetic_plate(c("trt", "trt", "trt", rep("X", 9)), plate_id = "2")
+  expect_equal(zebRabox:::find_compaction_target(list(p1, p2), "12", TRUE), 1L)
+})
+
+test_that("find_compaction_target finds a later target when only that plate has room", {
+  p1 <- make_synthetic_plate(rep("ctrl", 12), plate_id = "1")
+  p2 <- make_synthetic_plate(c("trt", "trt", rep("X", 10)), plate_id = "2")
+  p3 <- make_synthetic_plate(c("ctrl", "ctrl", "trt", rep("X", 9)), plate_id = "3")
+  expect_equal(zebRabox:::find_compaction_target(list(p1, p2, p3), "12", TRUE), 2L)
+})
+
+test_that("compact_plate_plans returns the list unchanged when no compaction is possible", {
+  p1 <- make_synthetic_plate(rep("ctrl", 12), plate_id = "1")
+  p2 <- make_synthetic_plate(c("ctrl", rep("X", 11)), plate_id = "2")
+  result <- zebRabox:::compact_plate_plans(list(p1, p2), "12", TRUE, seed = 1)
+  expect_identical(result, list(p1, p2))
+})
+
+test_that("compact_plate_plans merges trailing plates into the target and drops them", {
+  p1 <- make_synthetic_plate(c("ctrl", "ctrl", rep("X", 10)), plate_id = "1")
+  p2 <- make_synthetic_plate(c("trt", "trt", "trt", rep("X", 9)), plate_id = "2")
+  result <- zebRabox:::compact_plate_plans(list(p1, p2), "12", TRUE, seed = 1)
+
+  expect_length(result, 1L)
+  counts <- table(result[[1]]$condition[result[[1]]$condition != "X"])
+  expect_equal(as.integer(counts[["ctrl"]]), 2L)
+  expect_equal(as.integer(counts[["trt"]]), 3L)
+})
+
+test_that("compact_plate_plans never places relocated wells on border wells", {
+  p1 <- make_synthetic_plate(rep("X", 12), plate_id = "1")
+  p2 <- make_synthetic_plate(c("ctrl", rep("X", 11)), plate_id = "2")
+  result <- zebRabox:::compact_plate_plans(list(p1, p2), "12", include_borders = FALSE, seed = 1)
+
+  expect_length(result, 1L)
+  merged     <- result[[1]]
+  border_idx <- merged$animal %in% paste0(border_12, "_plate_1")
+  expect_true(all(merged$condition[border_idx] == "X"))
+})
+
+test_that("compact_plate_plans preserves plate_id and file_name of the kept plate", {
+  p1 <- make_synthetic_plate(c("ctrl", rep("X", 11)), plate_id = "1", file_name = "exp_plate_1.xlsx")
+  p2 <- make_synthetic_plate(c("trt", rep("X", 11)), plate_id = "2", file_name = "exp_plate_2.xlsx")
+  result <- zebRabox:::compact_plate_plans(list(p1, p2), "12", TRUE, seed = 1)
+
+  expect_length(result, 1L)
+  expect_equal(result[[1]]$plate_id[1], "1")
+  expect_equal(attr(result[[1]], "file_name"), "exp_plate_1.xlsx")
+})
+
+test_that("compact_plate_plans placement is reproducible with the same seed", {
+  p1 <- make_synthetic_plate(c("ctrl", "ctrl", rep("X", 10)), plate_id = "1")
+  p2 <- make_synthetic_plate(c("trt", "trt", "trt", rep("X", 9)), plate_id = "2")
+
+  r1 <- zebRabox:::compact_plate_plans(list(p1, p2), "12", TRUE, seed = 5)
+  r2 <- zebRabox:::compact_plate_plans(list(p1, p2), "12", TRUE, seed = 5)
+  expect_identical(r1[[1]]$condition, r2[[1]]$condition)
+})
+
+test_that("find_compaction_target and compact_plate_plans integrate with create_plate_plan output", {
+  plans  <- create_plate_plan("96", c("ctrl", "trt"), 12, n_plates = 3, seed = 42)
+  target <- zebRabox:::find_compaction_target(plans, "96", TRUE)
+  expect_equal(target, 1L)
+
+  merged <- zebRabox:::compact_plate_plans(plans, "96", TRUE, seed = 42)
+  expect_length(merged, 1L)
+  expect_equal(sum(merged[[1]]$condition != "X"), 24L)
 })

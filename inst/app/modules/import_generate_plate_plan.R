@@ -33,8 +33,7 @@ plate_plan_ui <- function(id) {
                                choices = c("Select a type" = "", "12", "24", "48", "96")),
             shiny::numericInput(ns("conditions_number"), "Number of Conditions", value = 1, min = 1),
             shiny::textInput(ns("conditions_name"), "Condition Names (semicolon-separated, e.g., pH8.1;CT)", value = ""),
-            shiny::numericInput(ns("replicates_number"), "Replicates per Condition", value = 1, min = 1),
-            shiny::numericInput(ns("units_per_replicate"), "Units per Replicate", value = 1, min = 1),
+            shiny::numericInput(ns("units_per_condition"), "Units per Condition", value = 1, min = 1),
             shiny::selectInput(ns("keep_border_wells"), "Include Border Wells?",
                                choices = c("Select an option" = "", "Yes" = "yes", "No" = "no")),
             shiny::numericInput(ns("seed_value"), "Seed for Randomization", value = 42),
@@ -64,6 +63,7 @@ plate_plan_ui <- function(id) {
         title = "Plate Plan Preview",
         width = 12,
         shiny::uiOutput(ns("plate_plan_tabs")),
+        shiny::uiOutput(ns("compact_plate_plan_section")),
         shiny::selectInput(ns("download_plate_id"), "Select Plate ID to Download", choices = NULL),
         shiny::downloadButton(ns("download_plate_plan"), "Download plate plan (.xlsx)"),
         shiny::downloadButton(ns("download_all_plate_plans"), "Download all plate plans (.zip)")
@@ -84,7 +84,7 @@ plate_plan_server <- function(id, rv) {
         (input$create_plate_plan == "no" ||
            (input$plate_type != "" && input$keep_border_wells != "" &&
               input$plate_number > 0 && input$conditions_number > 0 &&
-              input$replicates_number > 0 && input$units_per_replicate > 0 &&
+              input$units_per_condition > 0 &&
               !is.na(input$seed_value) && input$conditions_name != ""))
       shinyjs::toggleState("generate_plate_plan", valid)
     })
@@ -105,19 +105,19 @@ plate_plan_server <- function(id, rv) {
             }
 
             shiny::incProgress(0.6, detail = "Generating plate plan(s)")
-            rv$plate_plan_df_list <- create_plate_plan(
+            plan_params <- list(
               plate_type      = input$plate_type,
               conditions      = condition_names,
-              n_replicates    = input$replicates_number,
-              n_units         = input$units_per_replicate,
-              n_plates        = input$plate_number,
+              n_units         = input$units_per_condition,
               include_borders = tolower(input$keep_border_wells) %in% c("yes", "y"),
               seed            = input$seed_value,
               name            = input$plate_plan_name_xlsx
             )
+            rv$plate_plan_df_list <- do.call(create_plate_plan, c(plan_params, n_plates = input$plate_number))
 
             shiny::incProgress(0.2, detail = "Finalizing")
-            rv$plate_plan_type <- rep(as.integer(input$plate_type), length(rv$plate_plan_df_list))
+            rv$plate_plan_type   <- rep(as.integer(input$plate_type), length(rv$plate_plan_df_list))
+            rv$plate_plan_params <- plan_params
 
             notify("Plate plan generated successfully.", type = "message")
 
@@ -132,6 +132,7 @@ plate_plan_server <- function(id, rv) {
             )
             rv$plate_plan_type    <- lapply(plate_plan_list, zebRabox:::detect_plate_type)
             rv$plate_plan_df_list <- plate_plan_list
+            rv$plate_plan_params  <- NULL
             notify("Plate plans loaded successfully.", type = "message")
           }
         })
@@ -140,6 +141,95 @@ plate_plan_server <- function(id, rv) {
         notify(conditionMessage(e), type = "error", duration = NULL)
         message("Error in generate_plate_plan_shiny: ", conditionMessage(e))
       })
+    })
+
+    # ---------------- Compact Plates: only shown when a merge is possible ----------------
+    output$compact_plate_plan_section <- shiny::renderUI({
+      params    <- rv$plate_plan_params
+      current_n <- length(rv$plate_plan_df_list)
+
+      if (is.null(params) || current_n == 0) return(NULL)
+
+      target <- zebRabox:::find_compaction_target(
+        rv$plate_plan_df_list, params$plate_type, params$include_borders
+      )
+      if (is.na(target)) return(NULL)
+
+      trailing <- seq(target + 1L, current_n)
+      plate_label <- if (length(trailing) == 1L)
+        sprintf("Plate %d", trailing)
+      else
+        sprintf("Plates %s", paste(trailing, collapse = ", "))
+
+      shiny::tagList(
+        shiny::fluidRow(
+          shiny::column(
+            width = 4,
+            shiny::actionButton(session$ns("compact_plate_plan"), "Compact Plates")
+          ),
+          shiny::column(
+            width = 8,
+            shiny::tags$span(
+              style = "color:#b58105;",
+              sprintf(
+                "%s fit entirely into plate %d's empty wells. Compacting keeps plate %d's layout and merges the others into it.",
+                plate_label, target, target
+              )
+            )
+          )
+        ),
+        shiny::tags$br()
+      )
+    })
+
+    # ---------------- Compact Plates: action ----------------
+    shiny::observeEvent(input$compact_plate_plan, {
+      tryCatch({
+        params <- rv$plate_plan_params
+        shiny::req(params)
+
+        current_n <- length(rv$plate_plan_df_list)
+        target <- zebRabox:::find_compaction_target(
+          rv$plate_plan_df_list, params$plate_type, params$include_borders
+        )
+
+        if (is.na(target)) {
+          notify("No plates can currently be merged.", type = "message")
+          return(invisible(NULL))
+        }
+
+        shiny::withProgress(message = "Compacting plate plans...", value = 0.3, {
+          rv$plate_plan_df_list <- zebRabox:::compact_plate_plans(
+            rv$plate_plan_df_list, params$plate_type, params$include_borders, params$seed
+          )
+          rv$plate_plan_type <- rep(as.integer(params$plate_type), length(rv$plate_plan_df_list))
+        })
+
+        notify(sprintf("Compacted from %d to %d plate(s).", current_n, length(rv$plate_plan_df_list)), type = "message")
+
+      }, error = function(e) {
+        notify(conditionMessage(e), type = "error", duration = NULL)
+        message("Error in compact_plate_plan: ", conditionMessage(e))
+      })
+    })
+
+    # ---------------- Condition order (as typed) + shared color palette ----------------
+    # For freshly created plans, use the exact order the condition names were
+    # typed in. For imported plans (no known params), fall back to order of
+    # first appearance across all plates.
+    condition_order <- shiny::reactive({
+      shiny::req(rv$plate_plan_df_list)
+      if (!is.null(rv$plate_plan_params$conditions)) {
+        return(rv$plate_plan_params$conditions)
+      }
+      unique(unlist(lapply(rv$plate_plan_df_list, function(df) {
+        df <- zebRabox:::normalize_plate_conditions(df)
+        df$Condition[df$Condition != "X"]
+      })))
+    })
+
+    plate_colors <- shiny::reactive({
+      zebRabox:::plate_condition_colors(condition_order())
     })
 
     # ---------------- Update Download Choices ----------------
@@ -260,18 +350,18 @@ plate_plan_server <- function(id, rv) {
           df <- zebRabox:::parse_well_coords(df)
           df <- zebRabox:::normalize_plate_conditions(df)
 
-          # Count wells per condition (exclude X)
-          counts <- sort(table(df$Condition[df$Condition != "X"]), decreasing = TRUE)
+          # Count wells per condition (exclude X), ordered as the conditions were typed
+          counts  <- table(df$Condition[df$Condition != "X"])
+          ordered <- intersect(condition_order(), names(counts))
 
           out <- data.frame(
-            Condition = names(counts),
-            Wells     = as.integer(counts),
+            Condition = ordered,
+            Wells     = as.integer(counts[ordered]),
             stringsAsFactors = FALSE
           )
 
-          # Build the same color mapping as the plot
-          conditions <- unique(df$Condition[df$Condition != "X"])
-          colors <- zebRabox:::plate_condition_colors(conditions)
+          # Same color mapping as the plot, shared across all plates
+          colors <- plate_colors()
 
           dt <- DT::datatable(
             out,
@@ -358,8 +448,8 @@ plate_plan_server <- function(id, rv) {
             df$well_id
           )
 
-          colors      <- zebRabox:::plate_condition_colors(conditions_no_x)
-          all_conds   <- c(conditions_no_x, if ("X" %in% df$Condition) "X")
+          colors      <- plate_colors()
+          all_conds   <- c(intersect(condition_order(), conditions_no_x), if ("X" %in% df$Condition) "X")
 
           cell_px     <- 38L
           fig_w       <- length(config$cols) * cell_px + 220L

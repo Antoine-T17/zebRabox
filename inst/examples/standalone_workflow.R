@@ -38,12 +38,11 @@ cfg <- set_mode("tracking", "light_dark")
 # ── 3 · Plate plan ─────────────────────────────────────────────────────
 
 # Option A — generate a randomised plan from scratch (no files needed).
-# n_replicates × n_units × length(conditions) must equal plate capacity.
+# n_units × length(conditions) must equal plate capacity.
 plates <- create_plate_plan(
   plate_type   = "96",
   conditions   = c("ctrl", "trt"),
-  n_replicates = 4,
-  n_units      = 6,
+  n_units      = 24,
   n_plates     = 2
 )
 

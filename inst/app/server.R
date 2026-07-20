@@ -196,11 +196,10 @@ server <- function(input, output, session) {
     shiny::updateSelectInput(session, "plate_plan-plate_type",        selected = "")
     shiny::updateSelectInput(session, "plate_plan-keep_border_wells", selected = "")
 
-    shiny::updateNumericInput(session, "plate_plan-plate_number",        value = 1)
-    shiny::updateNumericInput(session, "plate_plan-conditions_number",   value = 1)
-    shiny::updateNumericInput(session, "plate_plan-replicates_number",   value = 1)
-    shiny::updateNumericInput(session, "plate_plan-units_per_replicate", value = 1)
-    shiny::updateNumericInput(session, "plate_plan-seed_value",          value = 42)
+    shiny::updateNumericInput(session, "plate_plan-plate_number",         value = 1)
+    shiny::updateNumericInput(session, "plate_plan-conditions_number",    value = 1)
+    shiny::updateNumericInput(session, "plate_plan-units_per_condition",  value = 1)
+    shiny::updateNumericInput(session, "plate_plan-seed_value",           value = 42)
 
     shiny::updateTextInput(session, "plate_plan-conditions_name",      value = "")
     shiny::updateTextInput(session, "plate_plan-plate_plan_name_xlsx", value = "plate_plan")
