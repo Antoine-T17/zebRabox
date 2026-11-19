@@ -26,7 +26,7 @@ plain R vectors, without needing to prepare an Excel file.
 \examples{
 period_df <- create_period_table(
   start      = c(0, 600, 1200),
-  transition = c("light1-dark1", "dark1-light2")
+  transition = c("light1-dark1", "dark1-light2", "light2-dark2")
 )
 }
 \seealso{

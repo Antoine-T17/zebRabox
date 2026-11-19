@@ -17,3 +17,19 @@
 ^_pkgdown\.yml$
 ^docs$
 ^pkgdown$
+
+# Citation / archive metadata
+^CITATION\.cff$
+^\.zenodo\.json$
+^paper$
+
+# Local working files (git-ignored, never part of the package)
+^\.claude$
+^daphnia_trajectory_app$
+^prompt_claude$
+^raw_txt$
+^raw_xlsx$
+^v1_0$
+^inst/app/backup$
+^guidelines_zebrabox\.pdf$
+^19_11_2026\.txt$

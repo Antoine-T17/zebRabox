@@ -30,8 +30,18 @@
 #' @export
 #' @examples
 #' cfg <- set_mode("tracking", "light_dark")
-#' result  <- run_processing(..., cfg = cfg$processing)
+#' names(cfg)
+#'
+#' \donttest{
+#' demo    <- zebrabox_example("light_dark")
+#' result  <- run_processing(
+#'   read_raw_files(demo$raw), read_plate_plan_files(demo$plate_plans),
+#'   as.data.frame(readxl::read_excel(demo$period_transition)),
+#'   as.data.frame(readxl::read_excel(demo$removal)),
+#'   cfg = cfg$processing
+#' )
 #' dataset <- prepare_all_zone(result$processed_data_list, cfg$visualization)
+#' }
 set_mode <- function(primary, secondary) {
   primary   <- tolower(trimws(as.character(primary)))
   secondary <- tolower(trimws(as.character(secondary)))

@@ -31,6 +31,10 @@ columns (output of reading the removal-specifications Excel file).}
 
 \item{log_fn}{Function accepting a single character string; called for
 progress and diagnostic messages. Default: silent.}
+
+\item{progress_fn}{Function \verb{function(i, n, name)} called after each plate
+is processed (plate index, number of plates, file name), e.g. to drive a
+progress bar. Default: silent.}
 }
 \value{
 A named list:

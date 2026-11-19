@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+title: "zebRabox: Processing and Visualization of ZebraBox Behavioural Data"
+abstract: >-
+  zebRabox is an R package and Shiny application that turns raw exports of the
+  ViewPoint ZebraBox high-throughput behavioural chamber into clean, merged,
+  analysis-ready datasets and figures. It provides randomized plate plan
+  generation, import of tracking and quantization data recorded under
+  light/dark or vibration/rest protocols, period assignment and data removal
+  steps, visualizations, percentage tables and statistical tests, both through
+  a graphical interface and as standalone R functions.
+authors:
+  - family-names: Tourret
+    given-names: Antoine
+    email: antoinetourretpro@gmail.com
+version: 0.2.0
+date-released: "2026-11-19"
+license: MIT
+repository-code: "https://github.com/Antoine-T17/zebRabox"
+keywords:
+  - R
+  - Shiny
+  - ZebraBox
+  - behaviour
+  - high-throughput screening
+  - ecotoxicology
+  - tracking

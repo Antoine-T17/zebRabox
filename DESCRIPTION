@@ -1,15 +1,22 @@
 Package: zebRabox
 Type: Package
-Title: ZebRabox Shiny Application
-Version: 0.1.1
+Title: Processing and Visualization of ZebraBox Behavioural Data
+Version: 0.2.0
 Authors@R: 
     person("Antoine", "Tourret", email = "antoinetourretpro@gmail.com", role = c("aut", "cre"))
 Maintainer: Antoine Tourret <antoinetourretpro@gmail.com>
-Description: Run the ZebRabox Shiny application for importing, processing and
-    interactively visualizing behavioural tracking data.
+Description: Turns raw exports of the ViewPoint ZebraBox high-throughput
+    behavioural chamber into clean, merged, analysis-ready datasets and
+    figures. Provides randomized plate plan generation, import of tracking
+    and quantization data recorded under light/dark or vibration/rest
+    protocols, period assignment and data removal steps, period, cumulative,
+    delta and time-course visualizations, percentage tables and statistical
+    tests. All steps are available both through a Shiny application and as
+    standalone R functions for reproducible scripted workflows.
 License: MIT + file LICENSE
+URL: https://github.com/Antoine-T17/zebRabox
+BugReports: https://github.com/Antoine-T17/zebRabox/issues
 Encoding: UTF-8
-LazyData: true
 Depends: R (>= 4.1.0)
 Imports:
     bslib,

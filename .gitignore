@@ -47,3 +47,7 @@ prompt_claude/
 v1_0/
 daphnia_trajectory_app/
 guidelines_zebrabox.pdf
+
+# Manuscript and personal notes (not published)
+paper/
+/19_11_2026.txt

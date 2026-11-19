@@ -106,7 +106,7 @@ read_raw_files <- function(paths, names = basename(paths)) {
 #' @examples
 #' period_df <- create_period_table(
 #'   start      = c(0, 600, 1200),
-#'   transition = c("light1-dark1", "dark1-light2")
+#'   transition = c("light1-dark1", "dark1-light2", "light2-dark2")
 #' )
 create_period_table <- function(start, transition) {
   start <- suppressWarnings(as.numeric(start))

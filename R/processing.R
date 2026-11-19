@@ -69,7 +69,7 @@ generate_conditions <- function(current_data, current_plan, i,
 
   if (all(is.na(current_data$condition))) {
     log_fn(sprintf(
-      "❌ Error: Plate %d - No conditions could be assigned. Check animal ID matching between raw data and plate plan.",
+      "\U0000274C Error: Plate %d - No conditions could be assigned. Check animal ID matching between raw data and plate plan.",
       i
     ))
     stop("Condition assignment failed for Plate ", i)
@@ -140,7 +140,7 @@ assign_periods <- function(current_data, period_df, i, cfg,
   current_data$start <- as.numeric(current_data$start)
   if (any(is.na(current_data$start))) {
     log_fn(sprintf(
-      "⚠️ Warning: Plate %d - Some values in 'start' column could not be converted to numeric.", i
+      "\U000026A0\U0000FE0F Warning: Plate %d - Some values in 'start' column could not be converted to numeric.", i
     ))
   }
 
@@ -232,7 +232,7 @@ remove_time_codes <- function(current_data, removal_row, i,
       invalid <- setdiff(time_codes_to_remove, current_data$start)
       if (length(invalid) > 0) {
         log_fn(sprintf(
-          "⚠️ Warning: Plate %d - These time codes do not match any 'start': %s",
+          "\U000026A0\U0000FE0F Warning: Plate %d - These time codes do not match any 'start': %s",
           i, paste(invalid, collapse = ", ")
         ))
       }
@@ -242,13 +242,13 @@ remove_time_codes <- function(current_data, removal_row, i,
         current_data <- current_data[!current_data$start %in% time_codes_to_remove, ]
       }
     } else {
-      log_fn(sprintf("⚠️ Warning: Plate %d - Invalid/empty 'remove_time_codes': %s", i, time_codes_str))
+      log_fn(sprintf("\U000026A0\U0000FE0F Warning: Plate %d - Invalid/empty 'remove_time_codes': %s", i, time_codes_str))
     }
   } else {
     log_fn(sprintf("Plate %d - No time codes to remove.", i))
   }
 
-  log_fn(sprintf("✅ Plate %d - Done.", i))
+  log_fn(sprintf("\U00002705 Plate %d - Done.", i))
   current_data
 }
 
@@ -280,7 +280,7 @@ remove_periods <- function(current_data, removal_row, i,
       invalid <- setdiff(periods_to_remove, current_data$period_with_numbers)
       if (length(invalid) > 0) {
         log_fn(sprintf(
-          "⚠️ Warning: Plate %d - These periods do not match any 'period_with_numbers': %s",
+          "\U000026A0\U0000FE0F Warning: Plate %d - These periods do not match any 'period_with_numbers': %s",
           i, paste(invalid, collapse = ", ")
         ))
       }
@@ -294,7 +294,7 @@ remove_periods <- function(current_data, removal_row, i,
     log_fn(sprintf("Plate %d - No periods to remove.", i))
   }
 
-  log_fn(sprintf("✅ Plate %d - Done.", i))
+  log_fn(sprintf("\U00002705 Plate %d - Done.", i))
   current_data
 }
 
@@ -325,7 +325,7 @@ remove_wells <- function(current_data, removal_row, i,
       invalid <- setdiff(wells_to_remove, current_data$animal)
       if (length(invalid) > 0) {
         log_fn(sprintf(
-          "⚠️ Warning: Plate %d - These wells do not match any 'animal': %s",
+          "\U000026A0\U0000FE0F Warning: Plate %d - These wells do not match any 'animal': %s",
           i, paste(invalid, collapse = ", ")
         ))
       }
@@ -335,13 +335,13 @@ remove_wells <- function(current_data, removal_row, i,
         current_data <- current_data[!current_data$animal %in% wells_to_remove, ]
       }
     } else {
-      log_fn(sprintf("⚠️ Warning: Plate %d - Invalid/empty 'remove_wells': %s", i, wells_str))
+      log_fn(sprintf("\U000026A0\U0000FE0F Warning: Plate %d - Invalid/empty 'remove_wells': %s", i, wells_str))
     }
   } else {
     log_fn(sprintf("Plate %d - No wells to remove.", i))
   }
 
-  log_fn(sprintf("✅ Plate %d - Done.", i))
+  log_fn(sprintf("\U00002705 Plate %d - Done.", i))
   current_data
 }
 
@@ -373,12 +373,12 @@ remove_conditions <- function(current_data, removal_row, i,
     conditions_to_remove <- trimws(unlist(strsplit(conditions_str, ",")))
     if (length(conditions_to_remove) > 0 && !any(is.na(conditions_to_remove))) {
       if (!"condition_grouped" %in% names(current_data) || all(is.na(current_data$condition_grouped))) {
-        log_fn(sprintf("❌ Error: Plate %d - 'condition_grouped' column missing/empty. Cannot remove conditions.", i))
+        log_fn(sprintf("\U0000274C Error: Plate %d - 'condition_grouped' column missing/empty. Cannot remove conditions.", i))
       } else {
         invalid <- setdiff(conditions_to_remove, current_data$condition_grouped)
         if (length(invalid) > 0) {
           log_fn(sprintf(
-            "⚠️ Warning: Plate %d - These conditions do not match any 'condition_grouped': %s",
+            "\U000026A0\U0000FE0F Warning: Plate %d - These conditions do not match any 'condition_grouped': %s",
             i, paste(invalid, collapse = ", ")
           ))
         }
@@ -389,13 +389,13 @@ remove_conditions <- function(current_data, removal_row, i,
         }
       }
     } else {
-      log_fn(sprintf("⚠️ Warning: Plate %d - Invalid/empty 'remove_conditions': %s", i, conditions_str))
+      log_fn(sprintf("\U000026A0\U0000FE0F Warning: Plate %d - Invalid/empty 'remove_conditions': %s", i, conditions_str))
     }
   } else {
     log_fn(sprintf("Plate %d - No conditions to remove.", i))
   }
 
-  log_fn(sprintf("✅ Plate %d - Done.", i))
+  log_fn(sprintf("\U00002705 Plate %d - Done.", i))
   current_data
 }
 
@@ -421,7 +421,7 @@ remove_conditions <- function(current_data, removal_row, i,
 process_zones <- function(current_data, i, cfg,
                           log_fn = function(msg) invisible(NULL)) {
   log_fn("---")
-  log_fn(sprintf("🔄 Plate %d - Processing zones…", i))
+  log_fn(sprintf("\U0001F504 Plate %d - Processing zones\U00002026", i))
   log_fn("---")
 
   zones     <- unique(current_data$an)
@@ -436,7 +436,7 @@ process_zones <- function(current_data, i, cfg,
     keys <- intersect(keys, names(z2))
 
     if (length(keys) < 2) {
-      log_fn(sprintf("⚠️ Plate %d - Not enough keys to align zones 0 and 2; skipping zone 1.", i))
+      log_fn(sprintf("\U000026A0\U0000FE0F Plate %d - Not enough keys to align zones 0 and 2; skipping zone 1.", i))
     } else {
       z2_small <- z2 |> dplyr::select(dplyr::all_of(c(keys, cfg$zone_num_cols)))
 
@@ -448,7 +448,7 @@ process_zones <- function(current_data, i, cfg,
         if (c0 %in% names(joined) && c2 %in% names(joined)) {
           joined[[col]] <- joined[[c0]] - joined[[c2]]
         } else {
-          log_fn(sprintf("⚠️ Plate %d - zone column '%s' missing after join; skipping.", i, col))
+          log_fn(sprintf("\U000026A0\U0000FE0F Plate %d - zone column '%s' missing after join; skipping.", i, col))
         }
       }
 
@@ -460,7 +460,7 @@ process_zones <- function(current_data, i, cfg,
           -dplyr::any_of(paste0(cfg$zone_num_cols, "_2"))
         )
 
-      log_fn(sprintf("✅ Plate %d - Zone 1 calculated by key-join (no recycling).", i))
+      log_fn(sprintf("\U00002705 Plate %d - Zone 1 calculated by key-join (no recycling).", i))
     }
   }
 
@@ -477,7 +477,7 @@ process_zones <- function(current_data, i, cfg,
       dplyr::mutate(zone = z) |>
       dplyr::select(dplyr::any_of(cols_to_select))
 
-    log_fn(sprintf("✅ Plate %d - Zone %s processed.", i, z))
+    log_fn(sprintf("\U00002705 Plate %d - Zone %s processed.", i, z))
     zd
   })
 
@@ -505,6 +505,9 @@ process_zones <- function(current_data, i, cfg,
 #' @param cfg Processing config list returned by [get_processing_config()].
 #' @param log_fn Function accepting a single character string; called for
 #'   progress and diagnostic messages. Default: silent.
+#' @param progress_fn Function `function(i, n, name)` called after each plate
+#'   is processed (plate index, number of plates, file name), e.g. to drive a
+#'   progress bar. Default: silent.
 #' @return A named list:
 #'   \describe{
 #'     \item{processed_data_list}{List of processed XLSX data frames, one
@@ -524,15 +527,15 @@ run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cf
   boundary_associations_list <- vector("list", n_plates)
 
   log_fn("==================================================")
-  log_fn("🚀 Run processing started.")
+  log_fn("\U0001F680 Run processing started.")
   log_fn(sprintf("Config: %s", cfg$ui_title %||% "<no ui_title>"))
   log_fn(sprintf("Plates detected (.xlsx): %d", n_plates))
   log_fn("==================================================")
-  log_fn("🔄 Starting XLSX: extraction → condition mapping → period assignment → removals → zones…")
+  log_fn("\U0001F504 Starting XLSX: extraction \U00002192 condition mapping \U00002192 period assignment \U00002192 removals \U00002192 zones\U00002026")
 
   for (i in seq_len(n_plates)) {
     log_fn("-----")
-    log_fn(sprintf("📄 XLSX | Plate %d/%d", i, n_plates))
+    log_fn(sprintf("\U0001F4C4 XLSX | Plate %d/%d", i, n_plates))
     log_fn("-----")
 
     current_plan <- plate_plans[[i]]
@@ -542,11 +545,11 @@ run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cf
     log_fn(sprintf("Plate plan columns: %s", paste(names(current_plan), collapse = ", ")))
 
     if (!is.null(cfg$filter_fn) && is.function(cfg$filter_fn)) {
-      log_fn(sprintf("🔎 Plate %d - Quantization filter enabled (cfg$filter_fn). Applying…", i))
+      log_fn(sprintf("\U0001F50E Plate %d - Quantization filter enabled (cfg$filter_fn). Applying\U00002026", i))
       current_data <- cfg$filter_fn(current_data)
-      log_fn(sprintf("✅ Plate %d - Quantization filter applied.", i))
+      log_fn(sprintf("\U00002705 Plate %d - Quantization filter applied.", i))
     } else {
-      log_fn(sprintf("ℹ️ Plate %d - No quantization filter applied (cfg$filter_fn not set for this mode).", i))
+      log_fn(sprintf("\U00002139\U0000FE0F Plate %d - No quantization filter applied (cfg$filter_fn not set for this mode).", i))
     }
 
     required_columns <- c("animal", "condition", "plate_id")
@@ -554,44 +557,44 @@ run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cf
     if (length(missing_cols) > 0) {
       stop(sprintf("Plate %d is missing required columns: %s", i, paste(missing_cols, collapse = ", ")))
     }
-    log_fn(sprintf("✅ Plate %d - Plate plan validated.", i))
+    log_fn(sprintf("\U00002705 Plate %d - Plate plan validated.", i))
 
-    log_fn(sprintf("🔄 Plate %d - Assigning conditions (condition, condition_grouped, condition_tagged)…", i))
+    log_fn(sprintf("\U0001F504 Plate %d - Assigning conditions (condition, condition_grouped, condition_tagged)\U00002026", i))
     cond_res     <- generate_conditions(current_data, current_plan, i, log_fn = log_fn)
     current_data <- cond_res$data
     current_plan <- cond_res$plan
-    log_fn(sprintf("✅ Plate %d - Conditions assigned. Columns now: %s", i, paste(names(current_data), collapse = ", ")))
+    log_fn(sprintf("\U00002705 Plate %d - Conditions assigned. Columns now: %s", i, paste(names(current_data), collapse = ", ")))
 
-    log_fn(sprintf("🔄 Plate %d - Assigning periods (period_with_numbers, period_without_numbers)…", i))
+    log_fn(sprintf("\U0001F504 Plate %d - Assigning periods (period_with_numbers, period_without_numbers)\U00002026", i))
     per_res      <- assign_periods(current_data, period_df, i, cfg, log_fn = log_fn)
     current_data <- per_res$data
     boundaries   <- per_res$boundaries
     transitions  <- per_res$transitions
-    log_fn(sprintf("✅ Plate %d - Periods assigned. Columns now: %s", i, paste(names(current_data), collapse = ", ")))
+    log_fn(sprintf("\U00002705 Plate %d - Periods assigned. Columns now: %s", i, paste(names(current_data), collapse = ", ")))
 
     plate_id_num <- suppressWarnings(as.numeric(current_plan$plate_id[1]))
     removal_row  <- removal_df[removal_df$plate_id == plate_id_num, , drop = FALSE]
 
     if (nrow(removal_row) > 0) {
-      log_fn(sprintf("🔄 Plate %d - Applying removal specs for plate_id=%s", i, as.character(current_plan$plate_id[1])))
+      log_fn(sprintf("\U0001F504 Plate %d - Applying removal specs for plate_id=%s", i, as.character(current_plan$plate_id[1])))
       rr           <- removal_row[1, , drop = FALSE]
       current_data <- remove_time_codes(current_data, rr, i, log_fn = log_fn)
       current_data <- remove_periods(current_data, rr, i, log_fn = log_fn)
       current_data <- remove_wells(current_data, rr, i, log_fn = log_fn)
       current_data <- remove_conditions(current_data, rr, i, log_fn = log_fn)
-      log_fn(sprintf("✅ Plate %d - Removal steps completed.", i))
+      log_fn(sprintf("\U00002705 Plate %d - Removal steps completed.", i))
     } else {
-      log_fn(sprintf("ℹ️ Plate %d - No removal rules for this plate (continuing).", i))
+      log_fn(sprintf("\U00002139\U0000FE0F Plate %d - No removal rules for this plate (continuing).", i))
     }
 
-    log_fn(sprintf("🔄 Plate %d - Converting numeric columns: %s", i, paste(cfg$convert_cols %||% character(), collapse = ", ")))
+    log_fn(sprintf("\U0001F504 Plate %d - Converting numeric columns: %s", i, paste(cfg$convert_cols %||% character(), collapse = ", ")))
     current_data <- convert_numeric_cols(current_data, cfg$convert_cols)
-    log_fn(sprintf("✅ Plate %d - Numeric conversion done.", i))
+    log_fn(sprintf("\U00002705 Plate %d - Numeric conversion done.", i))
 
-    log_fn(sprintf("🔄 Plate %d - Processing zones… (zone derived from raw 'an')", i))
+    log_fn(sprintf("\U0001F504 Plate %d - Processing zones\U00002026 (zone derived from raw 'an')", i))
     zone_combined <- process_zones(current_data, i, cfg, log_fn = log_fn)
     processed_data_list[[i]] <- zone_combined
-    log_fn(sprintf("✅ Plate %d - Zones processed. Output columns: %s", i, paste(names(zone_combined), collapse = ", ")))
+    log_fn(sprintf("\U00002705 Plate %d - Zones processed. Output columns: %s", i, paste(names(zone_combined), collapse = ", ")))
 
     boundary_associations_list[[i]] <- data.frame(
       plate_id    = as.character(current_plan$plate_id[1]),
@@ -605,7 +608,7 @@ run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cf
   }
 
   log_fn("==================================================")
-  log_fn("✅ XLSX processing completed for all plates.")
+  log_fn("\U00002705 XLSX processing completed for all plates.")
   log_fn(sprintf(
     "Stored: processed_data_list (%d) + boundary_associations_list (%d)",
     length(processed_data_list), length(boundary_associations_list)
@@ -617,7 +620,7 @@ run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cf
     boundary_associations_list = boundary_associations_list
   )
 
-  log_fn("🏁 Processing finished.")
+  log_fn("\U0001F3C1 Processing finished.")
   result
 }
 

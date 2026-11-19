@@ -2,10 +2,30 @@
 % Please edit documentation in R/run_app.R
 \name{run_app}
 \alias{run_app}
-\title{Run ZebRabox}
+\title{Run the zebRabox Shiny application}
 \usage{
 run_app(..., launch.browser = TRUE)
 }
+\arguments{
+\item{...}{Further arguments passed to \code{\link[shiny:runApp]{shiny::runApp()}} (e.g. \code{port}).}
+
+\item{launch.browser}{Logical. Open the app in the default web browser.
+Default: \code{TRUE}.}
+}
+\value{
+Called for its side effect; returns \code{invisible(NULL)} when the app
+is closed.
+}
 \description{
-Run ZebRabox
+Launches the graphical interface covering the full workflow: plate plan
+creation or import, raw data import, processing, visualization, percentage
+tables and statistics.
+}
+\examples{
+if (interactive()) {
+  run_app()
+}
+}
+\seealso{
+\code{\link[=zebrabox_example]{zebrabox_example()}} for a demo dataset to try the app.
 }
