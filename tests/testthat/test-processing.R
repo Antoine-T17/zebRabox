@@ -401,29 +401,7 @@ test_that("process_zones works with a single zone", {
 })
 
 # =============================================================================
-# 9. assign_periods_to_txt
-# =============================================================================
-
-test_that("assign_periods_to_txt adds period_with_numbers from T column", {
-  txt <- data.frame(T = c(5, 15), X = 0, Y = 0,
-                    file_txt_name = "A01", stringsAsFactors = FALSE)
-  per_df <- data.frame(start = 10, transition = "light1-dark1",
-                       stringsAsFactors = FALSE)
-  out <- zebRabox:::assign_periods_to_txt(txt, per_df, list(period_map = NULL))
-  expect_equal(out$period_with_numbers, c("light1", "dark1"))
-})
-
-test_that("assign_periods_to_txt applies period_map", {
-  txt <- data.frame(T = 50, X = 0, Y = 0,
-                    file_txt_name = "A01", stringsAsFactors = FALSE)
-  per_df <- data.frame(start = 10, transition = "light1-dark1",
-                       stringsAsFactors = FALSE)
-  out <- zebRabox:::assign_periods_to_txt(txt, per_df, tm_ldm_cfg)
-  expect_equal(out$period_without_numbers, "dark")
-})
-
-# =============================================================================
-# 10. run_processing — integration test (XLSX only, no ZIP)
+# 9. run_processing — integration test (XLSX)
 # =============================================================================
 
 make_full_raw <- function(n_rows = 8) {
@@ -538,59 +516,3 @@ test_that("run_processing applies removal rules", {
   expect_false("A01" %in% out_animals)
 })
 
-test_that("run_processing without ZIP has no txt slots", {
-  set.seed(1)
-  result <- run_processing(
-    raw_xlsx_list = list(make_full_raw()),
-    plate_plans   = list(make_plan()),
-    period_df     = make_period_df(),
-    removal_df    = make_removal_df(),
-    cfg           = tm_ldm_cfg
-  )
-  expect_null(result$txt_by_plate)
-  expect_null(result$txt_all)
-  expect_null(result$zip_xlsx_match)
-})
-
-# =============================================================================
-# 11. match_txt_zip_to_raw_xlsx
-# =============================================================================
-
-test_that("match_txt_zip_to_raw_xlsx returns required columns", {
-  raw <- data.frame(
-    location = c("ABC123_row1", "DEF456_row1"),
-    animal   = c("A01", "A02"),
-    an       = c(0, 0),
-    stringsAsFactors = FALSE
-  )
-  txt <- data.frame(
-    file_txt_name = c("ABC123", "DEF456"),
-    T = c(0, 10), X = 0, Y = 0,
-    stringsAsFactors = FALSE
-  )
-  out <- zebRabox:::match_txt_zip_to_raw_xlsx(raw, txt)
-  expect_true(all(c("T", "X", "Y", "file_txt_name", "animal", "zone") %in% names(out)))
-})
-
-test_that("match_txt_zip_to_raw_xlsx matches on 6-char prefix", {
-  raw <- data.frame(
-    location = "ABC123_extra",
-    animal   = "A01",
-    an       = 0L,
-    stringsAsFactors = FALSE
-  )
-  txt <- data.frame(
-    file_txt_name = "ABC123",
-    T = 5, X = 1, Y = 2,
-    stringsAsFactors = FALSE
-  )
-  out <- zebRabox:::match_txt_zip_to_raw_xlsx(raw, txt)
-  expect_equal(out$animal, "A01")
-})
-
-test_that("match_txt_zip_to_raw_xlsx errors on missing raw column", {
-  raw <- data.frame(animal = "A01", an = 0L, stringsAsFactors = FALSE)  # no location
-  txt <- data.frame(file_txt_name = "ABC123", T = 0, X = 0, Y = 0,
-                    stringsAsFactors = FALSE)
-  expect_error(zebRabox:::match_txt_zip_to_raw_xlsx(raw, txt), regexp = "location")
-})

@@ -13,16 +13,6 @@ should_remove <- function(x) {
   nzchar(trimws(as.character(x)))
 }
 
-zip_base_name <- function(x) {
-  x <- basename(x)
-  sub("\\.zip$", "", x, ignore.case = TRUE)
-}
-
-xlsx_base_name <- function(x) {
-  x <- basename(x)
-  sub("\\.(xlsx|xls|csv)$", "", x, ignore.case = TRUE)
-}
-
 # ----------------------------------------------------------------------
 # convert_numeric_cols
 # ----------------------------------------------------------------------
@@ -495,122 +485,6 @@ process_zones <- function(current_data, i, cfg,
 }
 
 # ----------------------------------------------------------------------
-# match_txt_zip_to_raw_xlsx
-# ----------------------------------------------------------------------
-
-#' Match TXT trajectory rows to wells using location prefix
-#'
-#' Joins the ZIP TXT data frame to the raw XLSX data frame on a 6-character
-#' prefix of the `location` / `file_txt_name` columns, attaching the
-#' `animal` and `zone` (raw `an`) columns from the XLSX side.
-#'
-#' @param raw_xlsx Data frame of raw XLSX data. Must contain `location`,
-#'   `animal`, and `an` columns.
-#' @param zip_txt Data frame of unzipped TXT data. Must contain
-#'   `file_txt_name`, `T`, `X`, and `Y` columns.
-#' @param n Number of characters used as prefix for matching (default 6).
-#' @param log_fn Logging function.
-#' @return Data frame with columns `T`, `X`, `Y`, `file_txt_name`,
-#'   `animal`, and `zone`.
-#' @keywords internal
-match_txt_zip_to_raw_xlsx <- function(raw_xlsx, zip_txt, n = 6,
-                                      log_fn = function(msg) invisible(NULL)) {
-  needed_raw <- c("location", "animal", "an")
-  missing_raw <- setdiff(needed_raw, names(raw_xlsx))
-  if (length(missing_raw) > 0) {
-    stop("Raw .xlsx missing required columns: ", paste(missing_raw, collapse = ", "))
-  }
-
-  if (!("file_txt_name" %in% names(zip_txt))) stop("ZIP txt df missing 'file_txt_name' column.")
-  needed_txt <- c("T", "X", "Y")
-  missing_txt <- setdiff(needed_txt, names(zip_txt))
-  if (length(missing_txt) > 0) stop("ZIP txt df missing required columns: ", paste(missing_txt, collapse = ", "))
-
-  raw_map <- raw_xlsx |>
-    dplyr::mutate(
-      loc6   = substr(as.character(.data$location), 1, n),
-      animal = trimws(as.character(.data$animal)),
-      zone   = as.character(.data$an)
-    ) |>
-    dplyr::filter(
-      !is.na(.data$loc6), .data$loc6 != "",
-      !is.na(.data$animal), .data$animal != ""
-    ) |>
-    dplyr::distinct(.data$loc6, .data$animal, .data$zone)
-
-  amb <- raw_map |>
-    dplyr::count(.data$loc6, name = "n_animals") |>
-    dplyr::filter(.data$n_animals > 1)
-
-  if (nrow(amb) > 0) {
-    log_fn("⚠️ Warning: some location prefixes map to multiple DIFFERENT animals (keeping first).")
-    raw_map <- raw_map |>
-      dplyr::group_by(.data$loc6) |>
-      dplyr::slice(1) |>
-      dplyr::ungroup()
-  }
-
-  txt2 <- zip_txt |>
-    dplyr::mutate(txt6 = substr(as.character(.data$file_txt_name), 1, n)) |>
-    dplyr::left_join(raw_map, by = c("txt6" = "loc6"))
-
-  txt2 |>
-    dplyr::select("T", "X", "Y", "file_txt_name", "animal", "zone")
-}
-
-# ----------------------------------------------------------------------
-# assign_periods_to_txt
-# ----------------------------------------------------------------------
-
-#' Assign period labels to TXT trajectory data
-#'
-#' Uses the same period-transition file as [assign_periods()] but
-#' operates on a TXT data frame whose time column is `T`.
-#'
-#' @param txt_df Data frame with a `T` column (numeric seconds).
-#' @param period_df Data frame with `start` and `transition` columns.
-#' @param cfg Processing config list; may contain a `period_map` function.
-#' @return The data frame with `period_with_numbers` and
-#'   `period_without_numbers` columns added.
-#' @keywords internal
-assign_periods_to_txt <- function(txt_df, period_df, cfg) {
-  txt_df$start <- suppressWarnings(as.numeric(txt_df$T))
-  txt_df$period_with_numbers <- NA_character_
-
-  split_list <- strsplit(as.character(period_df$transition), "-", fixed = TRUE)
-  split_list <- lapply(split_list, function(parts) {
-    if (length(parts) == 1) c(parts, parts)
-    else if (length(parts) == 2) parts
-    else stop("Each transition must contain a single hyphen.")
-  })
-
-  for (j in seq_len(nrow(period_df))) {
-    start_time <- period_df$start[j]
-    parts      <- split_list[[j]]
-    before     <- parts[1]
-    after      <- parts[2]
-
-    if (j == 1) {
-      txt_df$period_with_numbers[txt_df$start < start_time] <- before
-    }
-    if (j < nrow(period_df)) {
-      next_start <- period_df$start[j + 1]
-      txt_df$period_with_numbers[txt_df$start >= start_time & txt_df$start < next_start] <- after
-    } else {
-      txt_df$period_with_numbers[txt_df$start >= start_time] <- after
-    }
-  }
-
-  if (!is.null(cfg$period_map) && is.function(cfg$period_map)) {
-    txt_df$period_without_numbers <- cfg$period_map(txt_df$period_with_numbers)
-  } else {
-    txt_df$period_without_numbers <- txt_df$period_with_numbers
-  }
-
-  txt_df
-}
-
-# ----------------------------------------------------------------------
 # run_processing  (main orchestrator)
 # ----------------------------------------------------------------------
 
@@ -618,8 +492,7 @@ assign_periods_to_txt <- function(txt_df, period_df, cfg) {
 #'
 #' Processes a list of raw XLSX plates through the complete pipeline:
 #' optional quantization filter, condition assignment, period assignment,
-#' removal steps, numeric conversion, and zone computation. Optionally
-#' processes matching ZIP/TXT trajectory files.
+#' removal steps, numeric conversion, and zone computation.
 #'
 #' @param raw_xlsx_list Named or unnamed list of raw XLSX data frames
 #'   (one per plate, sorted in plate order).
@@ -630,9 +503,6 @@ assign_periods_to_txt <- function(txt_df, period_df, cfg) {
 #' @param removal_df Data frame with `plate_id` and optional removal
 #'   columns (output of reading the removal-specifications Excel file).
 #' @param cfg Processing config list returned by [get_processing_config()].
-#' @param raw_zip_list Optional list of unzipped TXT data frames (one per
-#'   ZIP archive). When provided, the ZIP/TXT pipeline runs after XLSX
-#'   processing.
 #' @param log_fn Function accepting a single character string; called for
 #'   progress and diagnostic messages. Default: silent.
 #' @return A named list:
@@ -641,18 +511,11 @@ assign_periods_to_txt <- function(txt_df, period_df, cfg) {
 #'       per plate.}
 #'     \item{boundary_associations_list}{List of boundary data frames
 #'       (plate_id, time_switch, transition).}
-#'     \item{txt_by_plate}{(Only if `raw_zip_list` provided) List of TXT
-#'       data frames, indexed by plate.}
-#'     \item{txt_all}{(Only if `raw_zip_list` provided) All TXT rows
-#'       row-bound.}
-#'     \item{zip_xlsx_match}{(Only if `raw_zip_list` provided) ZIP↔XLSX
-#'       name-matching table.}
 #'   }
 #' @seealso [set_mode()], [read_raw_files()], [prepare_dataset()],
 #'   [export_results()]
 #' @export
 run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cfg,
-                           raw_zip_list = NULL,
                            log_fn = function(msg) invisible(NULL),
                            progress_fn = function(i, n, name) invisible(NULL)) {
 
@@ -664,7 +527,6 @@ run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cf
   log_fn("🚀 Run processing started.")
   log_fn(sprintf("Config: %s", cfg$ui_title %||% "<no ui_title>"))
   log_fn(sprintf("Plates detected (.xlsx): %d", n_plates))
-  log_fn(sprintf("ZIP archives detected (.zip): %d", if (is.null(raw_zip_list)) 0L else length(raw_zip_list)))
   log_fn("==================================================")
   log_fn("🔄 Starting XLSX: extraction → condition mapping → period assignment → removals → zones…")
 
@@ -754,156 +616,6 @@ run_processing <- function(raw_xlsx_list, plate_plans, period_df, removal_df, cf
     processed_data_list        = processed_data_list,
     boundary_associations_list = boundary_associations_list
   )
-
-  # ---- TXT ZIP post-processing ----
-  if (!is.null(raw_zip_list) && length(raw_zip_list) > 0) {
-
-    zip_list  <- raw_zip_list
-    xlsx_list <- raw_xlsx_list
-
-    zip_names  <- vapply(zip_list,  function(x) as.character((attr(x, "file_name") %||% "")), FUN.VALUE = character(1))
-    xlsx_names <- vapply(xlsx_list, function(x) as.character((attr(x, "file_name") %||% "")), FUN.VALUE = character(1))
-
-    log_fn("-----")
-    log_fn("📦 TXT/ZIP post-processing started.")
-    log_fn(sprintf("ZIP files: %s",  paste(zip_names,  collapse = " | ")))
-    log_fn(sprintf("XLSX files: %s", paste(xlsx_names, collapse = " | ")))
-
-    zip_bases  <- zip_base_name(zip_names)
-    xlsx_bases <- xlsx_base_name(xlsx_names)
-
-    idx_xlsx_for_zip <- match(zip_bases, xlsx_bases)
-    if (any(is.na(idx_xlsx_for_zip))) {
-      missing <- zip_names[is.na(idx_xlsx_for_zip)]
-      stop(
-        "Processing stopped: no exact match between ZIP and XLSX names for: ",
-        paste(missing, collapse = ", "),
-        ".\nExpected ZIP base name to exactly match a raw_data .xlsx base name."
-      )
-    }
-
-    log_fn("✅ ZIP ↔ XLSX base-name matching OK.")
-    log_fn(sprintf("ZIP bases:  %s", paste(zip_bases,          collapse = " | ")))
-    log_fn(sprintf("XLSX bases: %s", paste(xlsx_bases,         collapse = " | ")))
-    log_fn(sprintf("Index map (zip->plate_idx): %s", paste(idx_xlsx_for_zip, collapse = ", ")))
-
-    txt_by_plate <- vector("list", n_plates)
-    names(txt_by_plate) <- paste0("Plate_", seq_along(txt_by_plate))
-
-    zip_xlsx_match <- data.frame(
-      zip_name  = zip_names,
-      xlsx_name = xlsx_names[idx_xlsx_for_zip],
-      plate_idx = idx_xlsx_for_zip,
-      stringsAsFactors = FALSE
-    )
-
-    for (k in seq_along(zip_list)) {
-      plate_idx  <- idx_xlsx_for_zip[k]
-      raw_xlsx_k <- xlsx_list[[plate_idx]]
-      zip_txt_k  <- zip_list[[k]]
-
-      log_fn("-----")
-      log_fn(sprintf("🧾 TXT | ZIP %d/%d", k, length(zip_list)))
-      log_fn(sprintf("ZIP file:  %s", zip_names[k]))
-      log_fn(sprintf("XLSX link: %s (plate_idx=%d)", xlsx_names[plate_idx], plate_idx))
-      log_fn(sprintf("Raw XLSX columns (for TXT mapping): %s", paste(names(raw_xlsx_k), collapse = ", ")))
-      log_fn(sprintf("ZIP TXT columns: %s", paste(names(zip_txt_k), collapse = ", ")))
-
-      log_fn("🔄 Step 1/3: Match wells by 6-char prefix (location ↔ file_txt_name) + attach animal + zone (raw 'an') …")
-      txt_k <- match_txt_zip_to_raw_xlsx(raw_xlsx_k, zip_txt_k, n = 6, log_fn = log_fn)
-      log_fn(sprintf("✅ Step 1 complete. TXT columns now: %s", paste(names(txt_k), collapse = ", ")))
-      n_total          <- nrow(txt_k)
-      n_missing_animal <- sum(is.na(txt_k$animal) | txt_k$animal == "")
-      n_missing_zone   <- sum(is.na(txt_k$zone)   | txt_k$zone   == "")
-      log_fn(sprintf("Rows: %d | Missing animal: %d | Missing zone: %d", n_total, n_missing_animal, n_missing_zone))
-
-      log_fn("🔄 Step 2/3: Enrich TXT with plate meta (plate_id + conditions) from processed XLSX …")
-      proc_k <- result$processed_data_list[[plate_idx]]
-
-      meta_k <- proc_k |>
-        dplyr::select(
-          "plate_id", "animal",
-          "condition", "condition_grouped", "condition_tagged"
-        ) |>
-        dplyr::mutate(
-          animal            = trimws(as.character(.data$animal)),
-          plate_id          = as.character(.data$plate_id),
-          condition         = as.character(.data$condition),
-          condition_grouped = as.character(.data$condition_grouped),
-          condition_tagged  = as.character(.data$condition_tagged)
-        ) |>
-        dplyr::group_by(.data$animal) |>
-        dplyr::slice(1) |>
-        dplyr::ungroup()
-
-      log_fn(sprintf("Meta columns attached: %s", paste(names(meta_k), collapse = ", ")))
-
-      txt_k <- txt_k |>
-        dplyr::mutate(animal = trimws(as.character(.data$animal))) |>
-        dplyr::left_join(meta_k, by = "animal", relationship = "many-to-one")
-
-      log_fn(sprintf("✅ Step 2 complete. TXT columns now: %s", paste(names(txt_k), collapse = ", ")))
-      n_enriched     <- sum(!is.na(txt_k$plate_id) & txt_k$plate_id != "")
-      n_not_enriched <- nrow(txt_k) - n_enriched
-      log_fn(sprintf("Enriched rows (plate_id filled): %d | Missing meta: %d", n_enriched, n_not_enriched))
-
-      if (n_not_enriched > 0) {
-        bad_animals <- txt_k |>
-          dplyr::filter(is.na(.data$plate_id) | .data$plate_id == "") |>
-          dplyr::distinct(.data$animal) |>
-          dplyr::pull(.data$animal)
-        log_fn(sprintf(
-          "⚠️ Missing meta for animals (sample): %s",
-          paste(utils::head(bad_animals, 10), collapse = ", ")
-        ))
-      }
-
-      log_fn("🧹 Step 2b/3: Removing TXT rows for wells removed during XLSX processing…")
-      valid_animals  <- unique(meta_k$animal)
-      n_before_clean <- nrow(txt_k)
-      txt_k <- txt_k |>
-        dplyr::filter(!is.na(.data$animal), .data$animal != "", .data$animal %in% valid_animals)
-      n_after_clean <- nrow(txt_k)
-      log_fn(sprintf(
-        "✅ TXT cleanup done: removed %d rows (animals not present in processed XLSX). Remaining: %d rows.",
-        n_before_clean - n_after_clean, n_after_clean
-      ))
-
-      log_fn("🔄 Step 3/3: Assign periods from T using the same transitions file …")
-      txt_k <- assign_periods_to_txt(txt_k, period_df, cfg)
-      log_fn("✅ Step 3 complete. Period columns attached: period_with_numbers, period_without_numbers")
-      log_fn(sprintf("Final TXT columns (before select): %s", paste(names(txt_k), collapse = ", ")))
-
-      txt_k <- txt_k |>
-        dplyr::select(
-          "T", "X", "Y", "file_txt_name", "animal",
-          "plate_id", "condition", "condition_grouped", "condition_tagged",
-          "period_with_numbers", "period_without_numbers",
-          "zone"
-        )
-
-      txt_by_plate[[plate_idx]] <- dplyr::bind_rows(txt_by_plate[[plate_idx]], txt_k)
-
-      log_fn(sprintf(
-        "✅ TXT stored for Plate %d: %d rows added | Total plate txt rows: %d",
-        plate_idx, nrow(txt_k), nrow(txt_by_plate[[plate_idx]])
-      ))
-    }
-
-    result$zip_xlsx_match <- zip_xlsx_match
-    result$txt_by_plate   <- txt_by_plate
-    result$txt_all        <- dplyr::bind_rows(txt_by_plate)
-
-    log_fn("==================================================")
-    log_fn("✅ TXT results stored:")
-    log_fn(sprintf("- txt_by_plate: %d plates",  length(txt_by_plate)))
-    log_fn(sprintf("- txt_all: %d rows",          nrow(result$txt_all)))
-    log_fn(sprintf("- zip_xlsx_match: %d rows",   nrow(zip_xlsx_match)))
-    log_fn("==================================================")
-
-  } else {
-    log_fn("ℹ️ No ZIP provided: skipping TXT post-processing.")
-  }
 
   log_fn("🏁 Processing finished.")
   result

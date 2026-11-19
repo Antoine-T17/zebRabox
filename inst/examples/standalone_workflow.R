@@ -65,14 +65,6 @@ if (FALSE) {
   raw_data <- read_raw_files(
     paths = c("plate1.xlsx", "plate2.xlsx")
   )
-
-  # With optional ZIP trajectory archives (one per plate):
-  raw_data <- read_raw_files(
-    paths = c("plate1.xlsx", "plate2.xlsx")
-  )
-  zip_data <- read_raw_files(
-    paths = c("plate1.zip", "plate2.zip")
-  )
 }
 # ────────────────────────────────────────────────────────────────────────
 
@@ -106,16 +98,6 @@ removal_df <- create_removal_table(
 if (FALSE) {
   result <- run_processing(
     raw_xlsx_list = raw_data,
-    plate_plans   = plates,
-    period_df     = period_df,
-    removal_df    = removal_df,
-    cfg           = cfg$processing
-  )
-
-  # With ZIP trajectories:
-  result <- run_processing(
-    raw_xlsx_list = raw_data,
-    raw_zip_list  = zip_data,
     plate_plans   = plates,
     period_df     = period_df,
     removal_df    = removal_df,

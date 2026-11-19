@@ -14,9 +14,8 @@ server <- function(input, output, session) {
     plate_plan_type     = NULL,
 
     # Raw data (canonical + sources)
-    raw_data_list       = NULL,  # <- ALWAYS: one dataframe per plate (xlsx + zip)
+    raw_data_list       = NULL,  # <- ALWAYS: one dataframe per plate
     raw_xlsx_list       = NULL,  # <- xlsx plates
-    raw_zip_list        = NULL,  # <- zip plates (each zip -> many txt -> one plate df)
 
     # Mapping / processing
     mapping             = NULL,
@@ -33,9 +32,6 @@ server <- function(input, output, session) {
     # Modes
     primary_mode        = NULL,
     secondary_mode      = NULL,
-
-    # Optional: keep track of temp dirs created by unzip to allow cleanup on reset
-    tmp_unzip_dirs      = character(),
 
     # Reset trigger: incremented on full reset; modules observe this to clear local state
     app_reset_trigger   = 0L
@@ -143,23 +139,12 @@ server <- function(input, output, session) {
   # ------------------------------------------------------------------
   shiny::observeEvent(input$reset_app, {
 
-    # ---- Optional: cleanup temp unzip dirs (if you tracked them) ----
-    if (length(rv$tmp_unzip_dirs %||% character()) > 0) {
-      for (p in rv$tmp_unzip_dirs) {
-        if (is.character(p) && nzchar(p) && dir.exists(p)) {
-          try(unlink(p, recursive = TRUE, force = TRUE), silent = TRUE)
-        }
-      }
-    }
-
     # ---- Clear RV (data/state) ----
     rv$plate_plan_df_list                    <- NULL
     rv$plate_plan_type                       <- NULL
 
     rv$raw_data_list                         <- NULL
     rv$raw_xlsx_list                         <- NULL
-    rv$raw_zip_list                          <- NULL
-    rv$tmp_unzip_dirs                        <- character()
 
     rv$mapping                               <- NULL
     rv$ordered_plate_plans                   <- NULL
@@ -183,9 +168,8 @@ server <- function(input, output, session) {
     # Plate plan module fileInput
     shinyjs::reset("plate_plan-plate_plan_files")
 
-    # Data importation module fileInputs (formatted data + raw data)
+    # Data importation module fileInput (raw data)
     shinyjs::reset("data_importation-raw_xlsx_files")
-    shinyjs::reset("data_importation-raw_zip_files")
 
     # Processing module fileInputs (if module has been created, reset is still safe)
     shinyjs::reset("processing-period_file")

@@ -10,7 +10,6 @@ run_processing(
   period_df,
   removal_df,
   cfg,
-  raw_zip_list = NULL,
   log_fn = function(msg) invisible(NULL),
   progress_fn = function(i, n, name) invisible(NULL)
 )
@@ -30,10 +29,6 @@ columns (output of reading the removal-specifications Excel file).}
 
 \item{cfg}{Processing config list returned by \code{\link[=get_processing_config]{get_processing_config()}}.}
 
-\item{raw_zip_list}{Optional list of unzipped TXT data frames (one per
-ZIP archive). When provided, the ZIP/TXT pipeline runs after XLSX
-processing.}
-
 \item{log_fn}{Function accepting a single character string; called for
 progress and diagnostic messages. Default: silent.}
 }
@@ -44,19 +39,12 @@ A named list:
 per plate.}
 \item{boundary_associations_list}{List of boundary data frames
 (plate_id, time_switch, transition).}
-\item{txt_by_plate}{(Only if \code{raw_zip_list} provided) List of TXT
-data frames, indexed by plate.}
-\item{txt_all}{(Only if \code{raw_zip_list} provided) All TXT rows
-row-bound.}
-\item{zip_xlsx_match}{(Only if \code{raw_zip_list} provided) ZIP↔XLSX
-name-matching table.}
 }
 }
 \description{
 Processes a list of raw XLSX plates through the complete pipeline:
 optional quantization filter, condition assignment, period assignment,
-removal steps, numeric conversion, and zone computation. Optionally
-processes matching ZIP/TXT trajectory files.
+removal steps, numeric conversion, and zone computation.
 }
 \seealso{
 \code{\link[=set_mode]{set_mode()}}, \code{\link[=read_raw_files]{read_raw_files()}}, \code{\link[=prepare_dataset]{prepare_dataset()}},

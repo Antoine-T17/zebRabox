@@ -33,10 +33,6 @@ Supported formats:
 \item{\code{.csv}}{Comma- or semicolon-separated values. Read with
 \code{\link[data.table]{fread}}, which auto-detects the separator and
 handles large files significantly faster than base-R alternatives.}
-\item{\code{.zip}}{Archive containing one \code{.txt} file per well (Wintrack
-trajectory export). Each \code{.txt} is read with
-\code{\link[data.table]{fread}}; a \code{file_txt_name} column is
-appended with the bare filename (e.g. \code{"A01"}).}
 }
 }
 \examples{

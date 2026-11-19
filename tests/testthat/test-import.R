@@ -19,15 +19,6 @@ utils::write.csv(df_ref, csv_path, row.names = FALSE)
 utils::write.table(df_ref, sc_path, sep = ";", row.names = FALSE)
 writexl::write_xlsx(df_ref, xlsx_path)
 
-# ZIP fixture — one well file
-tmp_dir   <- tempfile("zip_test_")
-dir.create(tmp_dir)
-well_df   <- data.frame(T = 1:5, X = seq(0.1, 0.5, 0.1), Y = seq(0.5, 0.1, -0.1))
-well_path <- file.path(tmp_dir, "A01.txt")
-utils::write.table(well_df, well_path, sep = "\t", row.names = FALSE)
-zip_path  <- tempfile(fileext = ".zip")
-zip::zip(zip_path, files = "A01.txt", root = tmp_dir)
-
 # ======================================================================
 # CSV
 # ======================================================================
@@ -84,43 +75,6 @@ test_that("read_raw_file XLSX: file_name attribute matches argument", {
 test_that("read_raw_file XLSX: data values preserved", {
   result <- read_raw_file(xlsx_path, "test.xlsx")
   expect_equal(result$animal, df_ref$animal)
-})
-
-# ======================================================================
-# ZIP
-# ======================================================================
-
-test_that("read_raw_file ZIP: returns a data.frame", {
-  result <- read_raw_file(zip_path, "plate1.zip")
-  expect_true(is.data.frame(result))
-})
-
-test_that("read_raw_file ZIP: file_name attribute matches argument", {
-  result <- read_raw_file(zip_path, "plate1.zip")
-  expect_equal(attr(result, "file_name"), "plate1.zip")
-})
-
-test_that("read_raw_file ZIP: file_txt_name column present with bare filename", {
-  result <- read_raw_file(zip_path, "plate1.zip")
-  expect_true("file_txt_name" %in% names(result))
-  expect_equal(unique(result$file_txt_name), "A01")
-})
-
-test_that("read_raw_file ZIP: coordinate columns preserved", {
-  result <- read_raw_file(zip_path, "plate1.zip")
-  expect_equal(nrow(result), 5L)
-  expect_true(all(c("T", "X", "Y") %in% names(result)))
-  expect_equal(result$X, well_df$X)
-})
-
-test_that("read_raw_file ZIP: error when archive contains no .txt files", {
-  empty_dir <- tempfile("empty_zip_")
-  dir.create(empty_dir)
-  csv_dummy <- file.path(empty_dir, "dummy.csv")
-  utils::write.csv(data.frame(x = 1), csv_dummy, row.names = FALSE)
-  bad_zip <- tempfile(fileext = ".zip")
-  zip::zip(bad_zip, files = "dummy.csv", root = empty_dir)
-  expect_error(read_raw_file(bad_zip, "empty.zip"), "no .txt files")
 })
 
 # ======================================================================

@@ -166,7 +166,7 @@ processing_module_server <- function(id, rv, config) {
     })
 
     # ======================================================================
-    # 1) UI selectors: map RAW XLSX -> Plate Plans (ZIP excluded)
+    # 1) UI selectors: map RAW XLSX -> Plate Plans
     # ======================================================================
     output$file_plate_selectors <- shiny::renderUI({
       shiny::req(rv$raw_xlsx_list, rv$plate_plan_df_list)
@@ -288,7 +288,6 @@ processing_module_server <- function(id, rv, config) {
             period_df     = rv$period_df,
             removal_df    = rv$removal_df,
             cfg           = cfg,
-            raw_zip_list  = rv$raw_zip_list,
             log_fn        = function(msg) { local_log <<- c(local_log, msg) },
             progress_fn   = function(i, n, name) {
               shiny::setProgress(
@@ -335,24 +334,6 @@ processing_module_server <- function(id, rv, config) {
         shiny::tabPanel("All Plates .xlsx", DT::dataTableOutput(ns("tbl_xlsx_all")))
       ))
 
-      # ---- TXT tabs ----
-      has_txt <- !is.null(rv$processing_results$txt_by_plate) &&
-        length(rv$processing_results$txt_by_plate) == length(xlsx_list) &&
-        any(vapply(rv$processing_results$txt_by_plate, function(x) !is.null(x) && nrow(x) > 0, logical(1)))
-
-      if (has_txt) {
-        tabs <- c(tabs, lapply(seq_along(xlsx_list), function(i) {
-          shiny::tabPanel(
-            paste0("Plate ", i, ".txt"),
-            DT::dataTableOutput(ns(paste0("tbl_txt_plate_", i)))
-          )
-        }))
-
-        tabs <- c(tabs, list(
-          shiny::tabPanel("All Plates .txt", DT::dataTableOutput(ns("tbl_txt_all")))
-        ))
-      }
-
       do.call(shiny::tabsetPanel, tabs)
     })
 
@@ -373,26 +354,6 @@ processing_module_server <- function(id, rv, config) {
       output$tbl_xlsx_all <- DT::renderDataTable({
         DT::datatable(dplyr::bind_rows(xlsx_list), options = list(scrollX = TRUE, pageLength = 25))
       })
-
-      # TXT per-plate + all
-      if (!is.null(rv$processing_results$txt_by_plate)) {
-        txt_by_plate <- rv$processing_results$txt_by_plate
-
-        lapply(seq_along(txt_by_plate), function(i) local({
-          ii <- i
-          output[[paste0("tbl_txt_plate_", ii)]] <- DT::renderDataTable({
-            df <- txt_by_plate[[ii]]
-            if (is.null(df) || nrow(df) == 0) return(DT::datatable(data.frame()))
-            DT::datatable(df, options = list(scrollX = TRUE, pageLength = 25))
-          })
-        }))
-
-        output$tbl_txt_all <- DT::renderDataTable({
-          df <- rv$processing_results$txt_all
-          if (is.null(df) || nrow(df) == 0) return(DT::datatable(data.frame()))
-          DT::datatable(df, options = list(scrollX = TRUE, pageLength = 25))
-        })
-      }
     })
 
     output$boundary_associations_table <- DT::renderDataTable({
@@ -438,33 +399,6 @@ processing_module_server <- function(id, rv, config) {
             dplyr::distinct()
 
           files_to_zip <- c(files_to_zip, write_csv_safe(boundary_df, file.path(temp_dir, "boundary_associations.csv")))
-        }
-
-        # txt all + per plate
-        if (!is.null(rv$processing_results$txt_all) &&
-            nrow(rv$processing_results$txt_all) > 0) {
-
-          files_to_zip <- c(files_to_zip, write_csv_safe(rv$processing_results$txt_all, file.path(temp_dir, "txt_all.csv")))
-
-          if (!is.null(rv$processing_results$txt_by_plate)) {
-            for (i in seq_along(rv$processing_results$txt_by_plate)) {
-              df <- rv$processing_results$txt_by_plate[[i]]
-              if (!is.null(df) && nrow(df) > 0) {
-                fn <- file.path(temp_dir, paste0("txt_plate_", i, ".csv"))
-                files_to_zip <- c(files_to_zip, write_csv_safe(df, fn))
-              }
-            }
-          }
-        }
-
-        # zip ↔ xlsx mapping
-        if (!is.null(rv$processing_results$zip_xlsx_match) &&
-            nrow(rv$processing_results$zip_xlsx_match) > 0) {
-
-          files_to_zip <- c(
-            files_to_zip,
-            write_csv_safe(rv$processing_results$zip_xlsx_match, file.path(temp_dir, "zip_xlsx_match.csv"))
-          )
         }
 
         files_to_zip <- unique(files_to_zip)

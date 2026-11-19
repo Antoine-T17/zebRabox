@@ -71,7 +71,7 @@ removal_df <- create_removal_table(
 
 # ── PROCESSING ────────────────────────────────────────────────────────
 # run_processing(raw_xlsx_list, plate_plans, period_df, removal_df, cfg,
-#                raw_zip_list, log_fn, progress_fn)
+#                log_fn, progress_fn)
 result <- run_processing(
   raw_xlsx_list = raw_data,
   plate_plans   = plates,
@@ -79,16 +79,6 @@ result <- run_processing(
   removal_df    = removal_df,
   cfg           = cfg$processing
 )
-
-# With optional ZIP trajectory archives
-# result <- run_processing(
-#   raw_xlsx_list = raw_data,
-#   raw_zip_list  = zip_data,           # list from read_raw_files(.zip)
-#   plate_plans   = plates,
-#   period_df     = period_df,
-#   removal_df    = removal_df,
-#   cfg           = cfg$processing
-# )
 
 
 # ── VISUALIZATION DATASETS ────────────────────────────────────────────

@@ -1,34 +1,10 @@
 # ======================================================================
 # modules/import_data.R
 # Data Importation Module
-# Two side-by-side input boxes:
-#   - "Formatted Data": upload .xlsx/.xls/.csv (1 file = 1 plate)
-#   - "Raw Data":       upload .zip archives (1 zip = 1 plate); each archive
-#                       may contain .xlsx/.xls/.csv OR .txt (Wintrack export).
-#                       All archives must use the same file type — mixing is
-#                       not allowed.
-# Sets rv$raw_xlsx_list, rv$raw_zip_list, rv$raw_data_list,
-#      rv$primary_mode, rv$secondary_mode.
+# Upload of raw data files (.xlsx/.xls/.csv, 1 file = 1 plate) and selection
+# of the primary / secondary modes.
+# Sets rv$raw_xlsx_list, rv$raw_data_list, rv$primary_mode, rv$secondary_mode.
 # ======================================================================
-
-# ----------------------------------------------------------------------
-# Helper: inspect a zip archive without extracting it.
-# Returns one of:
-#   "tabular" — all files are .xlsx / .xls / .csv
-#   "txt"     — all files are .txt  (Wintrack trajectory export)
-#   "mixed"   — multiple types present (not allowed)
-#   NA        — empty or unreadable archive
-# ----------------------------------------------------------------------
-detect_zip_content_type <- function(zippath) {
-  entries <- tryCatch(unzip(zippath, list = TRUE)$Name, error = function(e) character(0))
-  entries <- entries[!grepl("^__MACOSX/|\\/\\.", entries)]  # strip macOS artifacts
-  entries <- entries[nzchar(tools::file_ext(entries))]      # keep files only (not dirs)
-  exts    <- tolower(tools::file_ext(entries))
-  if (length(exts) == 0L)                      return(NA_character_)
-  if (all(exts == "txt"))                      return("txt")
-  if (all(exts %in% c("xlsx", "xls", "csv"))) return("tabular")
-  return("mixed")
-}
 
 # ----------------------------------------------------------------------
 # UI
@@ -53,17 +29,17 @@ data_importation_ui <- function(
 
     shiny::fluidRow(
 
-      # ---- Formatted Data (xlsx / xls / csv) ----
+      # ---- Raw Data (xlsx / xls / csv) ----
       shinydashboard::box(
-        title = "Formatted Data Inputs (Excel / CSV)",
-        width = 6,
+        title = "Raw Data Inputs (Excel / CSV)",
+        width = 12,
         shiny::wellPanel(
           shiny::tags$div(
             style = "margin-bottom: 3px;",
             shiny::tagAppendAttributes(
               shiny::fileInput(
                 ns("raw_xlsx_files"),
-                "Upload Formatted Data Files (.xlsx, .xls, .csv) — 1 file = 1 plate",
+                "Upload Raw Data Files (.xlsx, .xls, .csv) — 1 file = 1 plate",
                 multiple = TRUE,
                 accept   = c(".xlsx", ".xls", ".csv")
               ),
@@ -72,7 +48,7 @@ data_importation_ui <- function(
           ),
           shiny::tags$div(
             style = "margin-top: 0px; margin-bottom: 18px;",
-            shiny::actionButton(ns("load_raw_xlsx"), "Load Formatted Data")
+            shiny::actionButton(ns("load_raw_xlsx"), "Load Raw Data")
           ),
 
           shiny::selectInput(
@@ -83,43 +59,6 @@ data_importation_ui <- function(
             ns("secondary_mode"), "Secondary Mode",
             choices = c("Select a mode" = "", secondary_choices)
           )
-        )
-      ),
-
-      # ---- Raw Data (zip archives — tabular or Wintrack .txt) ----
-      shinydashboard::box(
-        title = "Raw Data Inputs (ZIP)",
-        width = 6,
-        shiny::wellPanel(
-          shiny::tags$div(
-            style = "margin-bottom: 3px;",
-            shiny::tagAppendAttributes(
-              shiny::fileInput(
-                ns("raw_zip_files"),
-                shiny::tagList(
-                  "Upload Plate Archives (.zip) — 1 zip = 1 plate",
-                  shiny::tags$div(
-                    style = "color: #777; font-size: 0.9em; margin-top: 3px;",
-                    "Each archive may contain .xlsx / .xls / .csv or .txt files.",
-                    shiny::tags$br(),
-                    "If .txt files are present, they must come from a ",
-                    shiny::tags$strong("Wintrack export"),
-                    " (one .txt per well).",
-                    shiny::tags$br(),
-                    shiny::tags$em("All archives must use the same file type.")
-                  )
-                ),
-                multiple = TRUE,
-                accept   = c(".zip")
-              ),
-              `aria-label` = "Upload plate archive .zip files"
-            )
-          ),
-          shiny::tags$div(
-            style = "margin-top: 0px; margin-bottom: 0px;",
-            shiny::actionButton(ns("load_raw_zip"), "Load ZIP Data")
-          ),
-          shiny::uiOutput(ns("wintrack_confirm_ui"))
         )
       )
     ),
@@ -150,17 +89,12 @@ data_importation_server <- function(id, rv) {
       scrollX      = TRUE
     )
 
-    # Files waiting for Wintrack confirmation before being loaded
-    pending_zip_files <- shiny::reactiveVal(NULL)
-    zip_content_type  <- shiny::reactiveVal(NULL)
-
     # ---------------- Enable/Disable Load Buttons ----------------
     shiny::observe({
       shinyjs::toggleState("load_raw_xlsx", !is.null(input$raw_xlsx_files))
-      shinyjs::toggleState("load_raw_zip",  !is.null(input$raw_zip_files))
     })
 
-    # ---------------- Load Formatted Data (xlsx / xls / csv) ----------------
+    # ---------------- Load Raw Data (xlsx / xls / csv) ----------------
     shiny::observeEvent(input$load_raw_xlsx, {
       tryCatch({
         shiny::req(input$raw_xlsx_files)
@@ -179,117 +113,7 @@ data_importation_server <- function(id, rv) {
           })
         })
 
-        notify("Formatted data loaded successfully.", type = "message")
-      }, error = function(e) {
-        notify(conditionMessage(e), type = "error", duration = NULL)
-      })
-    })
-
-    # Internal helper: read and store zip files once all checks have passed
-    do_load_zip <- function(files) {
-      shiny::withProgress(message = "Loading .zip archives...", value = 0, {
-        n    <- nrow(files)
-        step <- if (n > 0) 1 / n else 1
-
-        rv$raw_zip_list <- lapply(seq_len(n), function(i) {
-          shiny::incProgress(step, detail = files$name[i])
-          read_raw_file(files$datapath[i], files$name[i])
-        })
-      })
-      notify("ZIP data loaded successfully.", type = "message")
-      pending_zip_files(NULL)
-      zip_content_type(NULL)
-    }
-
-    # ---------------- Load ZIP Data (inspection + guards) ----------------
-    shiny::observeEvent(input$load_raw_zip, {
-      tryCatch({
-        shiny::req(input$raw_zip_files)
-
-        files <- input$raw_zip_files
-        ord   <- order(tolower(files$name))
-        files <- files[ord, , drop = FALSE]
-
-        # Inspect content type of every archive before loading anything
-        types <- vapply(files$datapath, detect_zip_content_type, character(1))
-
-        # Guard 1: mixed content within a single archive
-        if (any(!is.na(types) & types == "mixed")) {
-          bad <- files$name[!is.na(types) & types == "mixed"]
-          notify(
-            paste0(
-              "Mixed file types detected inside: ", paste(bad, collapse = ", "), ". ",
-              "Each archive must contain only one file type (.xlsx/.xls/.csv or .txt)."
-            ),
-            type = "error", duration = NULL
-          )
-          return()
-        }
-
-        # Guard 2: incompatible types across archives (e.g. one xlsx zip + one txt zip)
-        unique_types <- unique(types[!is.na(types)])
-        if (length(unique_types) > 1L) {
-          notify(
-            paste0(
-              "Incompatible ZIP contents: some archives contain .txt files (Wintrack export) ",
-              "while others contain tabular files (.xlsx/.xls/.csv). ",
-              "All archives must use the same file format."
-            ),
-            type = "error", duration = NULL
-          )
-          return()
-        }
-
-        content_type <- if (length(unique_types) == 1L) unique_types else NA_character_
-        pending_zip_files(files)
-        zip_content_type(content_type)
-
-        if (identical(content_type, "tabular")) {
-          # Tabular archives need no extra confirmation — load immediately
-          do_load_zip(files)
-        }
-        # .txt archives: hold and wait for the user's Wintrack confirmation
-
-      }, error = function(e) {
-        notify(conditionMessage(e), type = "error", duration = NULL)
-      })
-    })
-
-    # ---------------- Wintrack Confirmation UI ----------------
-    output$wintrack_confirm_ui <- shiny::renderUI({
-      if (!identical(zip_content_type(), "txt") || is.null(pending_zip_files())) return(NULL)
-
-      shiny::tags$div(
-        style = paste0(
-          "margin-top: 12px; padding: 10px; ",
-          "background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px;"
-        ),
-        shiny::tags$strong(
-          shiny::icon("triangle-exclamation"), " Wintrack .txt files detected"
-        ),
-        shiny::tags$p(
-          "The ZIP archives contain .txt files. ",
-          "These must be trajectory files exported from ",
-          shiny::tags$strong("Wintrack"),
-          " (one .txt file per well). ",
-          "Please confirm before loading.",
-          style = "margin: 6px 0 10px 0; font-size: 0.92em;"
-        ),
-        shiny::actionButton(
-          session$ns("confirm_wintrack"),
-          "Confirm — these are Wintrack export files",
-          icon  = shiny::icon("check"),
-          style = "background-color: #ffc107; color: #212529; border-color: #d39e00;"
-        )
-      )
-    })
-
-    # ---------------- Wintrack Confirmation Handler ----------------
-    shiny::observeEvent(input$confirm_wintrack, {
-      files <- pending_zip_files()
-      shiny::req(files)
-      tryCatch({
-        do_load_zip(files)
+        notify("Raw data loaded successfully.", type = "message")
       }, error = function(e) {
         notify(conditionMessage(e), type = "error", duration = NULL)
       })
@@ -297,9 +121,7 @@ data_importation_server <- function(id, rv) {
 
     # ---------------- Canonical raw_data_list for downstream processing ----------------
     shiny::observe({
-      xlsx <- rv$raw_xlsx_list %||% list()
-      zip  <- rv$raw_zip_list  %||% list()
-      rv$raw_data_list <- c(xlsx, zip)
+      rv$raw_data_list <- rv$raw_xlsx_list %||% list()
     })
 
     # ---------------- Robust modes updater ----------------
