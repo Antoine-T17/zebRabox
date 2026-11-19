@@ -1,13 +1,15 @@
 # ======================================================================
 # zebRabox — Standalone API Template
 # ======================================================================
-# All 27 public functions are shown with their key parameters.
-# Adapt paths and parameters to your experiment before running.
+# All public functions are shown with their key parameters.
+# Runs as-is on the demo dataset shipped with the package; replace the
+# demo paths with your own files to analyse your experiment.
 # ======================================================================
 
 library(zebRabox)
 
-setwd("C:/Users/Antoine Local/Desktop/PhD 2024-2027/Cahier de laboratoire/others/projects/R packages/zebRabox_claude/inst/examples/all")
+# Demo dataset: Light/Dark session, two 24-well plates (see ?zebrabox_example)
+demo <- zebrabox_example("light_dark")
 
 
 # ── MODE ──────────────────────────────────────────────────────────────
@@ -38,15 +40,14 @@ plates <- create_plate_plan(
 
 # read_plate_plan_files(paths, names = basename(paths))
 plates <- read_plate_plan_files(
-  paths = c("plate_plan_plate_4.xlsx", "plate_plan_plate_5.xlsx", "plate_plan_plate_6.xlsx", "plate_plan_plate_7.xlsx", "plate_plan_plate_8.xlsx", "plate_plan_plate_9.xlsx")
+  paths = demo$plate_plans
 )
 
 
 # ── DATA IMPORT ───────────────────────────────────────────────────────
 # read_raw_files(paths, names = basename(paths))
 raw_data <- read_raw_files(
-  paths = c("plaque_4_light_dark_24_04_2026.xlsx", "plaque_5_light_dark_24_04_2026.xlsx", "plaque_6_light_dark_24_04_2026.xlsx",
-            "plaque_7_light_dark_30_04_2026.xlsx", "plaque_8_light_dark_30_04_2026.xlsx", "plaque_9_light_dark_30_04_2026.xlsx")
+  paths = demo$raw
 )
 
 # read_raw_file(path, file_name = basename(path))  — single file
@@ -61,11 +62,11 @@ period_df <- create_period_table(
 # create_removal_table(plate_id, remove_time_codes, remove_wells,
 #                       remove_conditions, remove_periods)
 removal_df <- create_removal_table(
-  plate_id          = c(4, 6, 8),
-  remove_wells      = c("C03", "C01", "C03"), # plate 1: remove A01 & B01; plate 2: none
+  plate_id          = c(4, 5),
+  remove_wells      = c("C03", NA),      # plate 4: remove C03; plate 5: none
   remove_conditions = "X",               # NA = skip for all plates
   remove_periods    = NA,
-  remove_time_codes = NA
+  remove_time_codes = 4500
 )
 
 

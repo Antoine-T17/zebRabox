@@ -442,6 +442,21 @@ welcome_content <- shinydashboard::tabItem(
       shiny::p("Generate dataframes from processed data and create customizable charts with themes, labels, and colors."),
       shiny::div(class = "details", shiny::p("Export as .png or interactive .html for detailed hovering and exploration."))
     ))
+  ),
+
+  shiny::fluidRow(
+    shiny::column(width = 12, shinydashboard::box(width = NULL, status = "success",
+      shiny::div(style = "text-align: center; margin-bottom: 0.5em;", shiny::icon("graduation-cap", class = "fa-2x")),
+      shiny::h4(shiny::strong("TRY IT WITH DEMO DATA"), style = "text-align: center; text-transform: uppercase;"),
+      shiny::p("Download a real demo dataset (two 24-well plates, Tracking mode) to practise the full workflow.",
+               style = "text-align: center;"),
+      shiny::p("The archive holds two sessions, ", shiny::tags$code("light_dark/"), " and ", shiny::tags$code("vibration/"),
+               ", each with raw data, plate plans, a period transition file and a removal specification file. ",
+               "Load the plate plans, then the raw data, select Tracking Mode and the matching secondary mode, and run the processing.",
+               style = "text-align: center; color: #555;"),
+      shiny::div(style = "text-align: center; margin-top: 10px;",
+                 shiny::downloadButton("download_demo", "Download demo dataset (.zip)"))
+    ))
   )
 )
 

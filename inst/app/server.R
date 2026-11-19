@@ -50,6 +50,19 @@ server <- function(input, output, session) {
   data_importation_server("data_importation", rv)
 
   # ------------------------------------------------------------------
+  # Welcome Tab: Demo Dataset Download
+  # ------------------------------------------------------------------
+  output$download_demo <- shiny::downloadHandler(
+    filename = function() "zebRabox_demo_dataset.zip",
+    contentType = "application/zip",
+    content = function(file) {
+      demo_dir <- system.file("extdata", "demo", package = "zebRabox")
+      shiny::req(nzchar(demo_dir))
+      zip::zip(file, files = c("light_dark", "vibration"), root = demo_dir)
+    }
+  )
+
+  # ------------------------------------------------------------------
   # Helper Reactive: Build Mode Identifier
   # ------------------------------------------------------------------
   get_mode <- shiny::reactive({

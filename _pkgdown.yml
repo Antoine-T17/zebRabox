@@ -27,6 +27,7 @@ reference:
     contents:
       - read_raw_files
       - read_raw_file
+      - zebrabox_example
       - create_period_table
       - create_removal_table
 
